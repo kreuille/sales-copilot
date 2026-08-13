@@ -1,0 +1,810 @@
+# Registre machine des 20 agents (prompt-agents).
+# Ceci est un registre de SPECIFICATION (Phase 0). Le champ `template` doit être
+# rempli en Phase 1 par transcription verbatim du prompt source (PDF, page indiquée),
+# avec ajout du balisage contexte-système / contenu-utilisateur (voir docs/architecture/security-architecture.md).
+# Ne jamais reformuler le texte source sans revue explicite (docs/agents/governance.md).
+
+functions:
+  - id: F1
+    name: "Prospection et recherche de signaux"
+  - id: F2
+    name: "Outreach et messaging personnalisé"
+  - id: F3
+    name: "Follow-up et relances"
+  - id: F4
+    name: "Qualification des deals"
+  - id: F5
+    name: "Gestion du pipeline"
+  - id: F6
+    name: "Traitement des objections"
+  - id: F7
+    name: "Préparation des démos"
+  - id: F8
+    name: "Proposal et closing"
+  - id: F9
+    name: "CRM et ops"
+  - id: F10
+    name: "Suivi de performance"
+
+agents:
+  - id: agent-01-chasseur-de-signaux
+    name: "Le Chasseur de Signaux"
+    function_id: F1
+    version: 1
+    source_ref: "PDF p.5"
+    purpose: "Détecter si un compte est chaud MAINTENANT, à partir d'infos brutes collectées."
+    # Transcription verbatim (Phase 2). Les retours à la ligne ci-dessous sont
+    # reconstruits pour la lisibilité : l'extraction du bloc PDF (rendu en
+    # police mono) ne préserve pas la mise en forme d'origine. Aucun mot n'a
+    # été changé, ajouté ou retiré par rapport au texte source (PDF p.5).
+    template: |
+      Tu es un analyste de signaux d'achat B2B. Ton seul job : détecter si une entreprise est chaude MAINTENANT.
+
+      Mon offre : [DÉCRIS TON OFFRE EN 1 PHRASE]
+      Ma cible : [TON ICP : taille, secteur, persona]
+
+      Voici les infos brutes que j'ai collectées sur l'entreprise (site, LinkedIn, actus, offres d'emploi) :
+      [COLLE TOUT ICI, MÊME EN VRAC]
+
+      Analyse et rends-moi :
+      1. Score de chaleur /10 avec justification en 1 ligne
+      2. Les 3 signaux les plus forts détectés (recrutement, levée, nouveau dirigeant, changement d'outil, croissance, actu)
+      3. L'angle d'approche recommandé : quel signal utiliser comme prétexte de contact
+      4. Le timing : contacter maintenant, dans 1 mois, ou jamais
+
+      Règles : si les signaux sont faibles, dis-le. Un faux positif me coûte plus cher qu'un vrai négatif.
+    input_schema:
+      - {field: offer_one_liner, source: workspace_context, kind: inline, placeholder: "[DÉCRIS TON OFFRE EN 1 PHRASE]", required: true}
+      - {field: icp, source: workspace_context, kind: inline, placeholder: "[TON ICP : taille, secteur, persona]", required: true}
+      - {field: raw_company_info, source: user_input, kind: content_block, placeholder: "[COLLE TOUT ICI, MÊME EN VRAC]", required: true}
+    output_schema:
+      - {field: heat_score_10, type: integer, description: "Score de chaleur, 0 à 10"}
+      - {field: heat_score_justification, type: string, description: "Justification en 1 ligne"}
+      - {field: top_3_signals, type: "string[3]", description: "Les 3 signaux les plus forts détectés"}
+      - {field: recommended_angle, type: string, description: "Signal à utiliser comme prétexte de contact"}
+      - {field: timing_recommendation, type: enum, values: [maintenant, dans_1_mois, jamais]}
+    upstream_agents: []
+    downstream_agents: [agent-02-profileur]
+    model_class: BALANCED
+    scope: prospect
+    human_validation_required: true
+    confidence_note: "Le prompt exige explicitement de signaler les signaux faibles plutôt que d'inventer (BR-1)."
+
+  - id: agent-02-profileur
+    name: "Le Profileur"
+    function_id: F1
+    version: 1
+    source_ref: "PDF p.5-6"
+    purpose: "Produire un brief prospect exploitable en 2 minutes de lecture."
+    # Transcription verbatim (Phase 2), mêmes réserves de mise en forme que
+    # l'Agent 1 ci-dessus (source : PDF p.6).
+    template: |
+      Tu es un analyste de recherche commerciale. Ton seul job : produire un brief prospect exploitable en 2 minutes de lecture.
+
+      Mon offre : [TON OFFRE EN 1 PHRASE]
+
+      Voici les infos brutes sur le prospect (profil LinkedIn, posts récents, site de sa boîte, bio) :
+      [COLLE TOUT ICI]
+
+      Produis un brief structuré :
+      1. Qui c'est : rôle, parcours, ancienneté (3 lignes max)
+      2. Ce qui l'obsède en ce moment : déduis-le de ses posts, ses recrutements, son actu
+      3. 3 points d'accroche personnels (pas "j'ai vu votre profil", du concret)
+      4. Le pont entre son problème probable et mon offre
+      5. Ce que je ne dois PAS faire avec ce profil (ton, sujets à éviter)
+
+      Règles : zéro invention. Si une info manque, écris "inconnu" au lieu de deviner.
+    input_schema:
+      - {field: offer_one_liner, source: workspace_context, kind: inline, placeholder: "[TON OFFRE EN 1 PHRASE]", required: true}
+      - {field: raw_prospect_info, source: user_input, kind: content_block, placeholder: "[COLLE TOUT ICI]", required: true}
+      - {field: signals_output, source: agent-01-chasseur-de-signaux, prefills: raw_prospect_info, required: false}
+    output_schema:
+      - {field: who_summary, type: string, description: "Rôle, parcours, ancienneté — 3 lignes max"}
+      - {field: current_obsession, type: string}
+      - {field: personal_hooks_3, type: "string[3]", description: "3 points d'accroche personnels concrets"}
+      - {field: problem_to_offer_bridge, type: string}
+      - {field: what_not_to_do, type: string, description: "Ton/sujets à éviter avec ce profil"}
+    upstream_agents: [agent-01-chasseur-de-signaux]
+    downstream_agents: [agent-03-accrocheur]
+    model_class: BALANCED
+    scope: prospect
+    human_validation_required: true
+    confidence_note: "Règle explicite : écrire 'inconnu' plutôt qu'inventer (BR-1)."
+
+  - id: agent-03-accrocheur
+    name: "L'Accrocheur"
+    function_id: F2
+    version: 1
+    source_ref: "PDF p.6"
+    purpose: "Écrire 5 accroches de premier message sur 5 angles différents."
+    # Transcription verbatim (Phase 2), mêmes réserves de mise en forme que
+    # l'Agent 1 ci-dessus (source : PDF p.6).
+    template: |
+      Tu es un copywriter spécialisé en messages de premier contact B2B. Ton seul job : écrire des accroches qui déclenchent une réponse, pas un pitch.
+
+      Mon offre : [TON OFFRE]
+      Mon ton : [direct / chaleureux / expert : choisis]
+
+      Voici le contexte sur le prospect :
+      [COLLE LE BRIEF DE L'AGENT 2 OU TES NOTES]
+
+      Écris 5 accroches de premier message (LinkedIn DM ou email), chacune sur un angle différent :
+      1. Angle signal : son actu récente
+      2. Angle problème : la douleur probable de son rôle
+      3. Angle point commun : parcours, réseau, contenu
+      4. Angle question : une vraie question qui donne envie de répondre
+      5. Angle contre-pied : l'inverse de ce que tous ses DMs disent
+
+      Règles : 3 phrases max par message. Zéro "j'espère que vous allez bien". Zéro pitch produit dans le premier message. Le but : obtenir UNE réponse.
+    input_schema:
+      - {field: offer, source: workspace_context, kind: inline, placeholder: "[TON OFFRE]", required: true}
+      - {field: tone, source: workspace_context, kind: inline, placeholder: "[direct / chaleureux / expert : choisis]", required: true}
+      - {field: prospect_context, source: user_input, kind: content_block, placeholder: "[COLLE LE BRIEF DE L'AGENT 2 OU TES NOTES]", required: true}
+      - {field: prospect_brief, source: agent-02-profileur, prefills: prospect_context, required: false}
+    output_schema:
+      - {field: message_signal_angle, type: string}
+      - {field: message_problem_angle, type: string}
+      - {field: message_common_ground_angle, type: string}
+      - {field: message_question_angle, type: string}
+      - {field: message_contrarian_angle, type: string}
+    upstream_agents: [agent-02-profileur]
+    downstream_agents: [agent-04-architecte-sequence]
+    model_class: BALANCED
+    scope: prospect
+    human_validation_required: true
+
+  - id: agent-04-architecte-sequence
+    name: "L'Architecte de Séquence"
+    function_id: F2
+    version: 1
+    source_ref: "PDF p.6-7"
+    purpose: "Construire une séquence multicanal de 6 touches sur 3 semaines."
+    # Transcription verbatim (Phase 3), mêmes réserves de mise en forme que
+    # l'Agent 1 (source : PDF p.6-7).
+    template: |
+      Tu es un architecte de séquences outbound B2B. Ton seul job : construire une séquence multicanal qui crée une conversation, pas du spam.
+
+      Mon offre : [TON OFFRE]
+      Ma cible : [TON ICP]
+      Canaux dispo : [LinkedIn / email / les deux]
+      Contexte prospect type : [DÉCRIS UN PROSPECT TYPE OU COLLE UN BRIEF]
+
+      Construis une séquence de 6 touches sur 3 semaines :
+      - Pour chaque touche : jour, canal, objectif, message complet rédigé
+      - Alterne apport de valeur (ressource, insight, cas concret) et demandes légères
+      - La touche 6 est un break-up message propre qui laisse la porte ouverte
+
+      Règles : chaque message doit avoir de la valeur seul, même si le prospect n'a lu aucun des précédents. Jamais deux relances "je me permets de revenir vers vous" d'affilée.
+    input_schema:
+      - {field: offer, source: workspace_context, kind: inline, placeholder: "[TON OFFRE]", required: true}
+      - {field: icp, source: workspace_context, kind: inline, placeholder: "[TON ICP]", required: true}
+      - {field: channels_available, source: user_input, kind: inline, placeholder: "[LinkedIn / email / les deux]", required: true}
+      - {field: typical_prospect_context, source: user_input, kind: content_block, placeholder: "[DÉCRIS UN PROSPECT TYPE OU COLLE UN BRIEF]", required: true}
+      - {field: prospect_brief, source: agent-02-profileur, prefills: typical_prospect_context, required: false}
+      - {field: prospect_hooks, source: agent-03-accrocheur, prefills: typical_prospect_context, required: false}
+    output_schema:
+      - {field: sequence_6_touches, type: "string[]", description: "Une ligne par touche : jour, canal, objectif, message complet"}
+    upstream_agents: [agent-02-profileur, agent-03-accrocheur]
+    downstream_agents: []
+    model_class: BALANCED
+    scope: prospect
+    human_validation_required: true
+
+  - id: agent-05-relanceur
+    name: "Le Relanceur"
+    function_id: F3
+    version: 1
+    source_ref: "PDF p.7"
+    purpose: "Écrire la relance adaptée à une situation précise (3 versions + recommandation)."
+    template: |
+      Tu es un spécialiste de la relance commerciale. Ton seul job : écrire LA relance adaptée à la situation.
+
+      Contexte :
+      - Dernier échange : [COLLE LE DERNIER MESSAGE OU RÉSUME]
+      - Silence depuis : [X JOURS/SEMAINES]
+      - Étape du deal : [premier contact / après démo / propale envoyée / autre]
+
+      Écris 3 versions de relance :
+      1. Courte : 2 phrases, ton léger
+      2. Valeur : j'apporte un élément nouveau (insight, ressource, actu qui le concerne)
+      3. Directe : je demande clairement où on en est, sans agressivité
+
+      Puis recommande laquelle envoyer et quand, selon le contexte.
+
+      Règles : jamais de culpabilisation ("sans retour de votre part..."). Jamais s'excuser de relancer. Une relance = une raison d'écrire.
+    input_schema:
+      - {field: last_exchange_summary, source: deal_history, kind: content_block, placeholder: "[COLLE LE DERNIER MESSAGE OU RÉSUME]", required: true}
+      - {field: silence_duration, source: user_input, kind: inline, placeholder: "[X JOURS/SEMAINES]", required: true}
+      - {field: deal_stage, source: deal_history, kind: content_block, placeholder: "[premier contact / après démo / propale envoyée / autre]", required: true}
+    output_schema:
+      - {field: relance_courte, type: string}
+      - {field: relance_valeur, type: string}
+      - {field: relance_directe, type: string}
+      - {field: recommendation, type: string, description: "Laquelle envoyer et quand"}
+    upstream_agents: []
+    downstream_agents: []
+    model_class: FAST
+    scope: deal
+    human_validation_required: true
+
+  - id: agent-06-reanimateur
+    name: "Le Réanimateur"
+    function_id: F3
+    version: 1
+    source_ref: "PDF p.7-8"
+    purpose: "Rouvrir un deal froid (30j+) sans paraître désespéré."
+    template: |
+      Tu es un spécialiste de la réactivation de pipeline. Ton seul job : rouvrir une conversation morte sans avoir l'air désespéré.
+
+      Contexte du deal froid :
+      - Historique : [RÉSUME LA RELATION : comment on s'est parlé, jusqu'où c'est allé]
+      - Raison du blocage si connue : [budget / timing / silence radio / a choisi un concurrent]
+      - Ce qui a changé depuis : [nouvelle offre, nouveau cas client, son actu, rien]
+
+      Produis :
+      1. Le meilleur angle de réouverture : nouvelle info, son actu, saisonnalité, ou bilan honnête
+      2. Le message de réactivation complet (4 phrases max)
+      3. Un plan B si pas de réponse en 7 jours
+
+      Règles : ne jamais faire référence au silence ("je n'ai pas eu de nouvelles"). Repartir de la valeur, pas de la vexation.
+    input_schema:
+      - {field: relationship_history, source: deal_history, kind: content_block, placeholder: "[RÉSUME LA RELATION : comment on s'est parlé, jusqu'où c'est allé]", required: true}
+      - {field: blocking_reason, source: user_input, kind: inline, placeholder: "[budget / timing / silence radio / a choisi un concurrent]", required: false}
+      - {field: whats_changed, source: user_input, kind: inline, placeholder: "[nouvelle offre, nouveau cas client, son actu, rien]", required: false}
+    output_schema:
+      - {field: reopening_angle, type: string}
+      - {field: reactivation_message, type: string, description: "4 phrases max"}
+      - {field: plan_b_if_no_response, type: string}
+    upstream_agents: []
+    downstream_agents: []
+    model_class: BALANCED
+    scope: deal
+    human_validation_required: true
+
+  - id: agent-07-qualificateur
+    name: "Le Qualificateur"
+    function_id: F4
+    version: 1
+    source_ref: "PDF p.8"
+    purpose: "Qualifier froidement un deal après un call de découverte (5 critères)."
+    template: |
+      Tu es un directeur commercial expérimenté. Ton seul job : qualifier un deal froidement, sans l'optimisme du vendeur.
+
+      Mon offre et mon prix : [OFFRE + FOURCHETTE DE PRIX]
+
+      Voici mes notes du call de découverte : [COLLE TES NOTES OU LE TRANSCRIPT]
+
+      Évalue le deal sur 5 critères, note chacun /10 avec justification :
+      1. Douleur : le problème est-il réel et urgent pour lui ?
+      2. Budget : a-t-il les moyens et une enveloppe identifiée ?
+      3. Décision : mon interlocuteur peut-il signer ? Qui d'autre décide ?
+      4. Timing : y a-t-il une échéance qui force la décision ?
+      5. Fit : suis-je objectivement la bonne solution ?
+
+      Puis donne :
+      - Score global /10 et probabilité de closing honnête
+      - La question que j'aurais dû poser et que je n'ai pas posée
+      - La prochaine action pour faire avancer ou disqualifier vite
+
+      Règles : sois pessimiste par défaut. Un deal mal qualifié me coûte 3 semaines.
+    input_schema:
+      - {field: offer_and_price, source: workspace_context, kind: inline, placeholder: "[OFFRE + FOURCHETTE DE PRIX]", required: true}
+      - {field: discovery_notes, source: user_input, kind: content_block, placeholder: "[COLLE TES NOTES OU LE TRANSCRIPT]", required: true}
+    output_schema:
+      - {field: score_pain, type: integer}
+      - {field: score_budget, type: integer}
+      - {field: score_decision, type: integer}
+      - {field: score_timing, type: integer}
+      - {field: score_fit, type: integer}
+      - {field: global_score, type: integer}
+      - {field: closing_probability, type: string, description: "Probabilité de closing honnête"}
+      - {field: missed_question, type: string}
+      - {field: next_action, type: string}
+    upstream_agents: []
+    downstream_agents: [agent-16-strategie-closing]
+    model_class: DEEP_REASONING
+    scope: deal
+    human_validation_required: true
+    confidence_note: "Pessimisme par défaut exigé par le prompt (BR-2)."
+
+  - id: agent-08-detecteur-red-flags
+    name: "Le Détecteur de Red Flags"
+    function_id: F4
+    version: 1
+    source_ref: "PDF p.8-9"
+    purpose: "Détecter les signaux d'un futur client à problèmes avant signature."
+    template: |
+      Tu es un consultant senior qui a vu 100 missions mal partir. Ton seul job : détecter les signaux d'un futur client à problèmes AVANT la signature.
+
+      Voici tout ce que je sais sur ce prospect (échanges, comportement, demandes) : [COLLE LES ÉLÉMENTS : messages, comportement en call, négociation]
+
+      Analyse et rends :
+      1. Les red flags détectés, classés par gravité (comportement en négo, respect du temps, flou sur le besoin, historique de prestataires, paiement)
+      2. Pour chaque red flag : le risque concret en cours de mission
+      3. Verdict : GO / GO avec conditions (lesquelles : acompte, périmètre verrouillé, clause de sortie) / NO GO
+      4. Si GO avec conditions : le message exact pour poser ces conditions sans casser le deal
+
+      Règles : un client difficile à 5 000€ coûte plus cher qu'un refus. Dis-moi la vérité.
+    input_schema:
+      - {field: prospect_interactions, source: user_input, kind: content_block, placeholder: "[COLLE LES ÉLÉMENTS : messages, comportement en call, négociation]", required: true}
+    output_schema:
+      - {field: red_flags_with_risk, type: "string[]", description: "Un red flag par ligne, classé par gravité, avec le risque concret associé"}
+      - {field: verdict, type: enum, values: [GO, GO_avec_conditions, NO_GO]}
+      - {field: conditions_message, type: string, description: "Message exact pour poser les conditions si GO avec conditions"}
+    upstream_agents: []
+    downstream_agents: []
+    model_class: DEEP_REASONING
+    scope: deal
+    human_validation_required: true
+
+  - id: agent-09-analyste-pipeline
+    name: "L'Analyste de Pipeline"
+    function_id: F5
+    version: 1
+    source_ref: "PDF p.9"
+    purpose: "Analyser le pipeline et dire où est le vrai problème."
+    template: |
+      Tu es un sales ops senior. Ton seul job : analyser mon pipeline et me dire où est le vrai problème.
+
+      Voici mon pipeline actuel (liste des deals avec étape, montant, dernière action, date) : [COLLE TON PIPELINE : export CRM, tableau, ou liste manuelle]
+
+      Analyse :
+      1. Les deals bloqués : plus de 14 jours sans action, avec la relance recommandée pour chacun
+      2. Les deals zombies : à disqualifier ou archiver, et pourquoi
+      3. La répartition par étape : où est le goulot d'étranglement
+      4. Le montant pondéré réaliste du pipe (pas le montant total affiché)
+      5. Le TOP 3 des actions de la semaine, classées par impact revenu
+
+      Règles : préfère un pipeline propre de 10 deals à un pipeline gonflé de 40. Pousse-moi à tuer les zombies.
+    input_schema:
+      - {field: pipeline_export, source: user_input, kind: content_block, placeholder: "[COLLE TON PIPELINE : export CRM, tableau, ou liste manuelle]", required: true}
+    output_schema:
+      - {field: blocked_deals, type: "string[]", description: "Un deal bloqué par ligne, avec la relance recommandée"}
+      - {field: zombie_deals, type: "string[]", description: "Un deal zombie par ligne, avec la raison"}
+      - {field: bottleneck_stage, type: string, description: "Répartition par étape et goulot d'étranglement"}
+      - {field: weighted_pipeline_amount, type: string, description: "Montant pondéré réaliste du pipe"}
+      - {field: top_3_actions, type: "string[3]"}
+    upstream_agents: []
+    downstream_agents: [agent-10-priorisateur]
+    model_class: DEEP_REASONING
+    scope: workspace
+    human_validation_required: true
+    confidence_note: "Préférer un pipe propre à un pipe gonflé (BR-2)."
+
+  - id: agent-10-priorisateur
+    name: "Le Priorisateur"
+    function_id: F5
+    version: 1
+    source_ref: "PDF p.9-10"
+    purpose: "Transformer pipeline + contraintes en plan de vente hebdo réaliste."
+    template: |
+      Tu es mon chef des ventes. Ton seul job : transformer mon pipeline et mes contraintes en plan d'action hebdo réaliste.
+
+      Contexte :
+      - Temps dispo pour la vente cette semaine : [X HEURES]
+      - Mon pipeline : [COLLE LA SORTIE DE L'AGENT 9 OU TON PIPE]
+      - Contraintes fixes : [livraisons client, calls déjà bookés]
+
+      Produis mon plan de vente de la semaine :
+      1. Les 5 actions à plus fort impact revenu, dans l'ordre, avec temps estimé
+      2. Pour chaque action : le résultat attendu (réponse, call booké, propale signée)
+      3. Un créneau recommandé par action : des sessions bloquées, pas du saupoudrage
+      4. Ce que je REFUSE de faire cette semaine (aussi important que le reste)
+
+      Règles : jamais plus de 5 actions prioritaires. Si tout est prioritaire, rien ne l'est.
+    input_schema:
+      - {field: available_hours, source: user_input, kind: inline, placeholder: "[X HEURES]", required: true}
+      - {field: pipeline_state, source: user_input, kind: content_block, placeholder: "[COLLE LA SORTIE DE L'AGENT 9 OU TON PIPE]", required: true}
+      - {field: fixed_constraints, source: user_input, kind: content_block, placeholder: "[livraisons client, calls déjà bookés]", required: true}
+      - {field: pipeline_analysis, source: agent-09-analyste-pipeline, prefills: pipeline_state, required: false}
+    output_schema:
+      - {field: prioritized_actions, type: "string[]", description: "Une action par ligne : temps estimé, résultat attendu, créneau recommandé"}
+      - {field: what_to_refuse, type: string, description: "Ce que je refuse de faire cette semaine"}
+    upstream_agents: [agent-09-analyste-pipeline]
+    downstream_agents: [agent-20-coach-retro]
+    model_class: BALANCED
+    scope: workspace
+    human_validation_required: true
+    confidence_note: "Jamais plus de 5 actions prioritaires (BR-5 esprit similaire)."
+
+  - id: agent-11-desamorceur
+    name: "Le Désamorceur"
+    function_id: F6
+    version: 1
+    source_ref: "PDF p.10"
+    purpose: "Répondre à UNE objection précise sans être défensif."
+    template: |
+      Tu es un expert en négociation B2B. Ton seul job : m'aider à répondre à UNE objection précise sans être défensif ni insistant.
+
+      Mon offre et mon prix : [OFFRE + PRIX]
+
+      L'objection exacte du prospect : "[COLLE SES MOTS EXACTS]"
+
+      Contexte du deal : [étape, historique, enjeu pour lui]
+
+      Produis :
+      1. Ce que cette objection veut probablement dire : le vrai sujet derrière les mots (peur, budget réel, autre décideur, comparaison)
+      2. 3 réponses possibles : empathique, recadrage (je requalifie le vrai enjeu), directe (je challenge gentiment)
+      3. La question à poser en retour pour faire parler le prospect au lieu d'argumenter
+      4. Le signe que cette objection est en fait un non poli, et comment le vérifier
+
+      Règles : ne jamais contredire frontalement. Une objection traitée = une conversation qui continue, pas un débat gagné.
+    input_schema:
+      - {field: offer_and_price, source: workspace_context, kind: inline, placeholder: "[OFFRE + PRIX]", required: true}
+      - {field: exact_objection, source: user_input, kind: content_block, placeholder: "[COLLE SES MOTS EXACTS]", required: true}
+      - {field: deal_context, source: deal_history, kind: content_block, placeholder: "[étape, historique, enjeu pour lui]", required: false}
+    output_schema:
+      - {field: underlying_meaning, type: string}
+      - {field: response_options, type: "string[3]", description: "empathique, recadrage, directe"}
+      - {field: question_to_ask_back, type: string}
+      - {field: polite_no_signal, type: string, description: "Signe que l'objection est un non poli, et comment le vérifier"}
+    upstream_agents: []
+    downstream_agents: []
+    model_class: BALANCED
+    scope: deal
+    human_validation_required: true
+    confidence_note: "Jamais contredire frontalement (BR-4 esprit similaire)."
+
+  - id: agent-12-sparring-partner
+    name: "Le Sparring Partner"
+    function_id: F6
+    version: 1
+    source_ref: "PDF p.10-11"
+    purpose: "Simuler un prospect difficile pour s'entraîner avant le vrai call."
+    template: |
+      Tu es mon sparring partner de négociation. Ton seul job : jouer le prospect difficile pour m'entraîner avant le vrai call.
+
+      Le prospect que tu incarnes : [DÉCRIS-LE : rôle, personnalité, objections probables, niveau d'urgence]
+      Mon offre : [OFFRE + PRIX]
+
+      Règles du jeu :
+      1. Tu restes dans le personnage, tu ne m'aides pas pendant la simulation
+      2. Tu utilises ses objections probables : prix, timing, "je dois en parler à mon associé", concurrent moins cher
+      3. Tu réagis de façon réaliste : si je suis bon tu t'ouvres, si je récite tu te fermes
+      4. Quand j'écris "STOP", tu sors du personnage et tu débriefes : ce que j'ai bien fait, mes 2 pires réponses, et ce que je devrais dire à la place
+
+      Commence : tu viens de me dire que c'est trop cher.
+    interaction_mode: "conversation_multi_tour"  # cas particulier, voir docs/agents/registry.md et roadmap.md Phase 3
+    input_schema:
+      - {field: prospect_persona, source: user_input, kind: content_block, placeholder: "[DÉCRIS-LE : rôle, personnalité, objections probables, niveau d'urgence]", required: true}
+      - {field: offer_and_price, source: workspace_context, kind: inline, placeholder: "[OFFRE + PRIX]", required: true}
+    output_schema:
+      - {field: role_play_turns, type: string, description: "Tours de dialogue en simulation — non exécuté par le PromptEngine actuel (1 seul appel LLM par run)"}
+      - {field: debrief_on_stop, type: string, description: "Ce que j'ai bien fait, mes 2 pires réponses, ce qu'il fallait dire"}
+    upstream_agents: []
+    downstream_agents: []
+    model_class: BALANCED
+    scope: conversational # transcrit mais non branché à l'exécution (voir roadmap.md Phase 3, docs/agents/escalation-rules.md R-5) : nécessite une UI de chat multi-tour, incompatible avec le PromptEngine actuel (1 appel LLM par run)
+    human_validation_required: false  # simulation d'entraînement, pas une sortie envoyée à un tiers
+    confidence_note: "Aucun effet de bord externe, usage purement d'entraînement — seul agent sans validation humaine requise avant usage, car rien n'est jamais transmis à un prospect réel."
+
+  - id: agent-13-preparateur-demo
+    name: "Le Préparateur de Démo"
+    function_id: F7
+    version: 1
+    source_ref: "PDF p.11"
+    purpose: "Préparer une démo centrée sur le prospect, pas le produit."
+    template: |
+      Tu es un sales engineer senior. Ton seul job : préparer une démo qui parle du prospect, pas du produit.
+
+      Mon produit/service : [DÉCRIS-LE + les 3 fonctionnalités ou livrables clés]
+      Le prospect : [COLLE LE BRIEF OU LES NOTES DE DÉCOUVERTE]
+      Durée du call : [30/45/60 MIN]
+
+      Construis le déroulé de la démo :
+      1. Ouverture (2 min) : reformulation de SON problème avec SES mots (donne la phrase exacte)
+      2. Le scénario de démo : quel cas d'usage montrer en premier (son cas, pas le tour du produit), avec le fil narratif minute par minute
+      3. Les 3 moments "waouh" à provoquer, liés à ses douleurs identifiées
+      4. Les questions d'engagement à poser PENDANT la démo, pas après
+      5. Le close de fin de call : prochaine étape concrète et datée
+
+      Règles : jamais plus de 40% du temps en présentation. Une démo est une conversation, pas un tunnel.
+    input_schema:
+      - {field: product_description, source: workspace_context, kind: inline, placeholder: "[DÉCRIS-LE + les 3 fonctionnalités ou livrables clés]", required: true}
+      - {field: prospect_brief, source: deal_history, kind: content_block, placeholder: "[COLLE LE BRIEF OU LES NOTES DE DÉCOUVERTE]", required: true}
+      - {field: call_duration, source: user_input, kind: inline, placeholder: "[30/45/60 MIN]", required: true}
+    output_schema:
+      - {field: opening_reformulation, type: string, description: "Phrase exacte reformulant SON problème avec SES mots"}
+      - {field: demo_scenario, type: string, description: "Scénario minute par minute"}
+      - {field: wow_moments, type: "string[3]"}
+      - {field: engagement_questions, type: "string[]", description: "Questions à poser PENDANT la démo"}
+      - {field: closing_next_step, type: string}
+    upstream_agents: []
+    downstream_agents: []
+    model_class: DEEP_REASONING
+    scope: deal
+    human_validation_required: true
+
+  - id: agent-14-debriefeur-call
+    name: "Le Débriefeur de Call"
+    function_id: F7
+    version: 1
+    source_ref: "PDF p.11-12"
+    purpose: "Extraire d'un call tout ce qui fait avancer ou tuer le deal."
+    template: |
+      Tu es un analyste de calls commerciaux. Ton seul job : extraire d'un call tout ce qui fait avancer ou tuer le deal.
+
+      Voici le transcript ou mes notes du call : [COLLE LE TRANSCRIPT OU TES NOTES]
+
+      Produis le débrief :
+      1. Les signaux d'achat détectés (mots exacts du prospect)
+      2. Les objections exprimées ET les hésitations non formulées : silences, "on verra", changements de sujet
+      3. Les infos de qualification captées : budget, décideurs, timing, process
+      4. Ce que j'ai raté ou mal géré dans le call (sois direct)
+      5. Le prochain move : action, canal, timing, et le message de suivi déjà rédigé
+
+      Règles : cite les mots exacts du prospect quand c'est possible. C'est là que la vérité se cache.
+    input_schema:
+      - {field: call_transcript_or_notes, source: user_input, kind: content_block, placeholder: "[COLLE LE TRANSCRIPT OU TES NOTES]", required: true}
+    output_schema:
+      - {field: buying_signals, type: "string[]", description: "Mots exacts du prospect"}
+      - {field: objections_and_hesitations, type: "string[]", description: "Objections exprimées et hésitations non formulées"}
+      - {field: qualification_info, type: string, description: "Budget, décideurs, timing, process"}
+      - {field: what_i_missed, type: string}
+      - {field: next_move_with_message, type: string, description: "Action, canal, timing, message de suivi déjà rédigé"}
+    upstream_agents: []
+    downstream_agents: [agent-15-redacteur-propale, agent-18-compte-rendu]
+    model_class: BALANCED
+    scope: deal
+    human_validation_required: true
+    confidence_note: "Citer les mots exacts du prospect quand possible (BR-1 esprit similaire)."
+
+  - id: agent-15-redacteur-propale
+    name: "Le Rédacteur de Propale"
+    function_id: F8
+    version: 1
+    source_ref: "PDF p.12"
+    purpose: "Transformer des notes en propale claire, lisible en 5 minutes."
+    template: |
+      Tu es un consultant senior spécialisé en propositions commerciales. Ton seul job : transformer mes notes en propale claire qui se lit en 5 minutes.
+
+      Contexte :
+      - Mon offre et mes prix : [OFFRE + TARIFS]
+      - Notes du call / besoin du client : [COLLE TES NOTES]
+      - Format souhaité : [1-PAGER / PROPALE COMPLÈTE]
+
+      Rédige la propale :
+      1. Rappel du contexte et de l'objectif du client, avec ses mots
+      2. Le problème à résoudre, chiffré si possible : ce que ça lui coûte de ne rien faire
+      3. La solution proposée : périmètre précis, livrables, et ce qui N'EST PAS inclus
+      4. Planning avec jalons
+      5. Investissement : 2 options max (pas 4), avec une recommandation claire
+      6. Prochaine étape avec date limite de validité
+
+      Règles : zéro jargon, zéro superlatif ("solution innovante"). Le client doit pouvoir la forwarder à son associé sans que je sois là pour l'expliquer.
+    input_schema:
+      - {field: offer_and_pricing, source: workspace_context, kind: inline, placeholder: "[OFFRE + TARIFS]", required: true}
+      - {field: call_notes_or_need, source: deal_history, kind: content_block, placeholder: "[COLLE TES NOTES]", required: true}
+      - {field: format, source: user_input, kind: inline, placeholder: "[1-PAGER / PROPALE COMPLÈTE]", required: true}
+      - {field: call_debrief, source: agent-14-debriefeur-call, prefills: call_notes_or_need, required: false}
+    output_schema:
+      - {field: context_recap, type: string}
+      - {field: quantified_problem, type: string, description: "Chiffré si possible : coût de l'inaction"}
+      - {field: solution_scope_and_exclusions, type: string, description: "Périmètre, livrables, ce qui n'est PAS inclus"}
+      - {field: planning_milestones, type: string}
+      - {field: pricing_options, type: "string[]", description: "2 options max, avec une recommandation claire"}
+      - {field: next_step_with_deadline, type: string}
+    upstream_agents: [agent-14-debriefeur-call]
+    downstream_agents: []
+    model_class: DEEP_REASONING
+    scope: deal
+    human_validation_required: true
+
+  - id: agent-16-strategie-closing
+    name: "Le Stratège de Closing"
+    function_id: F8
+    version: 1
+    source_ref: "PDF p.12-13"
+    purpose: "Construire le plan de closing d'un deal précis jusqu'à la signature."
+    template: |
+      Tu es un closer expérimenté. Ton seul job : construire le plan de closing d'un deal précis, du point actuel à la signature.
+
+      Le deal :
+      - Historique : [RÉSUME : qui, quoi, où on en est, montant]
+      - Propale envoyée le : [DATE], réaction : [SA RÉACTION]
+      - Blocage actuel : [ce qui empêche la signature, si connu]
+
+      Construis le plan de closing :
+      1. Diagnostic : pourquoi ce deal n'est pas encore signé (la vraie raison probable)
+      2. Le plan d'action daté sur 2 semaines : chaque touche, son objectif, son message
+      3. Le levier d'urgence honnête utilisable (dispo limitée, date de démarrage, conditions) : jamais de fausse urgence
+      4. La concession que je peux faire SI besoin, et ce que je demande en échange
+      5. Le point de sortie : à quelle date je requalifie ce deal en perdu et je passe à autre chose
+
+      Règles : un deal qui traîne 6 semaines après propale est un non déguisé dans 80% des cas. Aide-moi à forcer la clarté, pas la vente.
+    input_schema:
+      - {field: deal_history_summary, source: deal_history, kind: content_block, placeholder: "[RÉSUME : qui, quoi, où on en est, montant]", required: true}
+      - {field: proposal_sent_date, source: user_input, kind: inline, placeholder: "[DATE]", required: true}
+      - {field: proposal_reaction, source: user_input, kind: content_block, placeholder: "[SA RÉACTION]", required: true}
+      - {field: current_blocker, source: user_input, kind: content_block, placeholder: "[ce qui empêche la signature, si connu]", required: false}
+      - {field: qualification_output, source: agent-07-qualificateur, prefills: deal_history_summary, required: false}
+    output_schema:
+      - {field: diagnosis, type: string, description: "Pourquoi ce deal n'est pas encore signé"}
+      - {field: action_plan, type: "string[]", description: "Plan d'action daté sur 2 semaines, une touche par ligne"}
+      - {field: honest_urgency_lever, type: string}
+      - {field: possible_concession, type: string, description: "Concession possible et ce que je demande en échange"}
+      - {field: exit_point_date, type: string, description: "Date à laquelle je requalifie ce deal en perdu"}
+    upstream_agents: [agent-07-qualificateur]
+    downstream_agents: []
+    model_class: DEEP_REASONING
+    scope: deal
+    human_validation_required: true
+    confidence_note: "Jamais de fausse urgence (BR-4)."
+
+  - id: agent-17-greffier
+    name: "Le Greffier"
+    function_id: F9
+    version: 1
+    source_ref: "PDF p.13"
+    purpose: "Transformer des notes en vrac en fiche CRM propre et structurée."
+    template: |
+      Tu es un assistant sales ops. Ton seul job : transformer mes notes en vrac en fiche CRM propre et structurée.
+
+      Mon CRM : [NOTION / AIRTABLE / HUBSPOT / AUTRE]
+
+      Voici mes notes brutes (call, vocal, mail, pense-bête) : [COLLE TOUT EN VRAC]
+
+      Structure-les en fiche :
+      - Contact : nom, rôle, entreprise, coordonnées repérées
+      - Deal : offre concernée, montant estimé, étape actuelle
+      - Contexte : besoin, douleurs, citations importantes
+      - Qualification : budget / décideur / timing (ce qu'on sait, ce qui manque)
+      - Historique : ce qui s'est passé, avec les dates
+      - Prochaine action : quoi, quand, par quel canal
+      - Tags suggérés pour mon CRM
+
+      Règles : ne perds AUCUNE info des notes. Ce qui ne rentre dans aucune case va dans "Contexte". Signale les infos manquantes critiques.
+    input_schema:
+      - {field: crm_type, source: user_input, kind: inline, placeholder: "[NOTION / AIRTABLE / HUBSPOT / AUTRE]", required: true}
+      - {field: raw_notes, source: user_input, kind: content_block, placeholder: "[COLLE TOUT EN VRAC]", required: true}
+    output_schema:
+      - {field: contact_fields, type: string, description: "Nom, rôle, entreprise, coordonnées repérées"}
+      - {field: deal_fields, type: string, description: "Offre concernée, montant estimé, étape actuelle"}
+      - {field: context_fields, type: string, description: "Besoin, douleurs, citations importantes"}
+      - {field: qualification_fields, type: string, description: "Budget / décideur / timing — ce qu'on sait, ce qui manque"}
+      - {field: history_fields, type: string, description: "Ce qui s'est passé, avec les dates"}
+      - {field: next_action, type: string}
+      - {field: suggested_tags, type: "string[]"}
+    upstream_agents: []
+    downstream_agents: []
+    model_class: FAST
+    scope: prospect
+    human_validation_required: true
+    confidence_note: "Ne perdre aucune info des notes ; signaler les infos critiques manquantes (BR-1)."
+
+  - id: agent-18-compte-rendu
+    name: "Le Rédacteur de Compte Rendu"
+    function_id: F9
+    version: 1
+    source_ref: "PDF p.13-14"
+    purpose: "Rédiger l'email post-call qui verrouille les décisions."
+    template: |
+      Tu es mon assistant commercial. Ton seul job : rédiger l'email de compte rendu post-call qui verrouille les décisions et fait avancer le deal.
+
+      Notes du call : [COLLE TES NOTES OU LE TRANSCRIPT]
+
+      Rédige l'email de suivi :
+      1. Objet court et spécifique (pas "Suite à notre échange")
+      2. Merci en 1 ligne, sans flagornerie
+      3. Ce qu'on a validé ensemble : bullets, avec les mots du prospect
+      4. Les prochaines étapes : qui fait quoi pour quand (moi ET lui)
+      5. Une phrase qui projette vers le résultat final, pas vers le process
+
+      Règles : 120 mots max. Envoyable dans l'heure qui suit le call. Le prospect doit pouvoir répondre "OK pour moi" en 5 secondes.
+    input_schema:
+      - {field: call_notes, source: deal_history, kind: content_block, placeholder: "[COLLE TES NOTES OU LE TRANSCRIPT]", required: true}
+      - {field: call_debrief, source: agent-14-debriefeur-call, prefills: call_notes, required: false}
+    output_schema:
+      - {field: subject_line, type: string}
+      - {field: thanks_line, type: string}
+      - {field: validated_points, type: "string[]", description: "Ce qu'on a validé ensemble, avec les mots du prospect"}
+      - {field: next_steps, type: string, description: "Qui fait quoi pour quand (moi ET lui)"}
+      - {field: closing_projection_sentence, type: string}
+    upstream_agents: [agent-14-debriefeur-call]
+    downstream_agents: []
+    model_class: FAST
+    scope: deal
+    human_validation_required: true
+    confidence_note: "120 mots max — sortie envoyable, mais toujours validée/copiée manuellement, jamais auto-envoyée (BR-6)."
+
+  - id: agent-19-analyste-perf
+    name: "L'Analyste de Perf"
+    function_id: F10
+    version: 1
+    source_ref: "PDF p.14"
+    purpose: "Trouver où le funnel fuit et quoi corriger en premier."
+    # Transcription verbatim (Phase 3). Le bracket [X] est réutilisé 5 fois
+    # dans le texte source pour 5 métriques différentes — chaque entrée
+    # input_schema ci-dessous cible la même occurrence "[X]" que celle qui
+    # apparaît à sa position dans le texte (voir assemble.ts
+    # replaceFirstOccurrence : les champs sont substitués dans l'ordre où ils
+    # sont déclarés ici, qui correspond à l'ordre du texte).
+    template: |
+      Tu es un analyste revenue ops. Ton seul job : trouver où mon funnel fuit et quoi corriger en premier.
+
+      Mes chiffres sur les [30/90] derniers jours :
+      - Nouveaux prospects contactés : [X]
+      - Réponses obtenues : [X]
+      - Calls de découverte : [X]
+      - Propales envoyées : [X]
+      - Deals signés : [X]
+      - Panier moyen : [X €]
+
+      Analyse :
+      1. Calcule les taux de conversion à chaque étape
+      2. Compare aux fourchettes standards du B2B services (donne-les)
+      3. Identifie LA fuite principale : l'étape qui, corrigée, rapporte le plus
+      4. Propose 3 actions concrètes pour corriger cette fuite précise, pas des généralités
+      5. Projette : si je corrige, combien de deals en plus par mois à effort égal
+
+      Règles : une seule fuite prioritaire à la fois. Corriger 5 étapes en même temps = n'en corriger aucune.
+    input_schema:
+      - {field: period_days, source: user_input, kind: inline, placeholder: "[30/90]", required: true}
+      - {field: new_prospects_contacted, source: user_input, kind: inline, placeholder: "[X]", required: true}
+      - {field: replies_obtained, source: user_input, kind: inline, placeholder: "[X]", required: true}
+      - {field: discovery_calls, source: user_input, kind: inline, placeholder: "[X]", required: true}
+      - {field: proposals_sent, source: user_input, kind: inline, placeholder: "[X]", required: true}
+      - {field: deals_signed, source: user_input, kind: inline, placeholder: "[X]", required: true}
+      - {field: average_deal_size, source: user_input, kind: inline, placeholder: "[X €]", required: true}
+    output_schema:
+      - {field: conversion_rates_per_stage, type: string, description: "Taux de conversion à chaque étape"}
+      - {field: benchmark_comparison, type: string, description: "Comparaison aux fourchettes standards B2B services"}
+      - {field: main_leak, type: string, description: "LA fuite principale identifiée"}
+      - {field: three_concrete_actions, type: "string[3]"}
+      - {field: projection_if_fixed, type: string}
+    upstream_agents: []
+    downstream_agents: []
+    model_class: BALANCED
+    scope: workspace
+    human_validation_required: true
+    confidence_note: "Une seule fuite prioritaire à la fois."
+
+  - id: agent-20-coach-retro
+    name: "Le Coach de Rétro"
+    function_id: F10
+    version: 1
+    source_ref: "PDF p.14-15"
+    purpose: "Faire la rétrospective de semaine en 10 minutes et en tirer UNE amélioration."
+    template: |
+      Tu es mon coach commercial. Ton seul job : faire ma rétrospective de semaine en 10 minutes et en tirer UNE amélioration.
+
+      Ma semaine :
+      - Ce que j'avais prévu : [COLLE TON PLAN, PAR EXEMPLE LA SORTIE DE L'AGENT 10]
+      - Ce qui s'est réellement passé : [RACONTE : actions faites, réponses, calls, signatures, échecs]
+      - Comment je me sens sur la vente en ce moment : [1 PHRASE HONNÊTE]
+
+      Fais la rétro :
+      1. Les 3 faits marquants (des faits, pas des impressions)
+      2. Ce qui a marché et POURQUOI, pour le refaire volontairement
+      3. Ce qui n'a pas marché : distingue mauvaise exécution / mauvaise stratégie / pas de chance
+      4. L'amélioration UNIQUE à tester la semaine prochaine, formulée en action précise
+      5. Le message que tu m'enverrais lundi matin pour bien démarrer la semaine
+
+      Règles : pas de liste de 10 résolutions. Une seule amélioration testable. La régularité bat l'intensité.
+    input_schema:
+      - {field: planned_week_notes, source: user_input, kind: content_block, placeholder: "[COLLE TON PLAN, PAR EXEMPLE LA SORTIE DE L'AGENT 10]", required: true}
+      - {field: actual_week, source: user_input, kind: content_block, placeholder: "[RACONTE : actions faites, réponses, calls, signatures, échecs]", required: true}
+      - {field: sales_mood_sentence, source: user_input, kind: content_block, placeholder: "[1 PHRASE HONNÊTE]", required: true}
+      - {field: planned_week, source: agent-10-priorisateur, prefills: planned_week_notes, required: false}
+    output_schema:
+      - {field: three_key_facts, type: "string[3]"}
+      - {field: what_worked_and_why, type: string}
+      - {field: what_didnt_work, type: string, description: "Distingue mauvaise exécution / mauvaise stratégie / pas de chance"}
+      - {field: single_improvement, type: string, description: "L'amélioration UNIQUE à tester, formulée en action précise"}
+      - {field: monday_morning_message, type: string}
+    upstream_agents: [agent-10-priorisateur]
+    downstream_agents: []
+    model_class: BALANCED
+    scope: workspace
+    human_validation_required: true
+    confidence_note: "Une seule amélioration testable, pas une liste de résolutions."
+
+onboarding_recommendation_rules:
+  - symptom: "je_ne_contacte_personne"
+    recommended_agents: [agent-01-chasseur-de-signaux, agent-02-profileur, agent-03-accrocheur]
+  - symptom: "on_me_repond_mais_ca_ne_signe_pas"
+    recommended_agents: [agent-07-qualificateur, agent-11-desamorceur, agent-16-strategie-closing]
+  - symptom: "mon_pipe_est_un_cimetiere"
+    recommended_agents: [agent-05-relanceur, agent-06-reanimateur, agent-09-analyste-pipeline]
+  - symptom: "je_vends_mais_cest_le_chaos"
+    recommended_agents: [agent-17-greffier, agent-18-compte-rendu, agent-10-priorisateur]

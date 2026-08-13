@@ -1,0 +1,227 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+//
+// Domain model transcribed from docs/architecture/data-architecture.md.
+// workspace_id is non-nullable on every business table from day one (ADR-003),
+// even though row-level security is not enabled in V1.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WorkspaceRole {
+  owner
+  member
+}
+
+enum DealStage {
+  first_contact
+  after_demo
+  proposal_sent
+  closing
+  lost
+  won
+}
+
+enum AgentRunStatus {
+  succeeded
+  failed
+  validation_error
+}
+
+// Mirrors agents/registry.yaml `model_class` — routing config, not a
+// per-execution decision (agent-architecture.md "Classes de modèle").
+enum ModelClass {
+  FAST
+  BALANCED
+  DEEP_REASONING
+}
+
+// Which entity an agent runs against — determines which page can list/run
+// it. `conversational` (Agent 12) is transcribed but not wired to any page:
+// the PromptEngine is single-call, incompatible with a multi-turn roleplay
+// (roadmap.md treats it separately).
+enum AgentScope {
+  prospect
+  deal
+  workspace
+  conversational
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String?
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  memberships   WorkspaceMember[]
+  triggeredRuns AgentRun[]        @relation("AgentRunTriggeredBy")
+
+  @@map("user")
+}
+
+model Workspace {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  members   WorkspaceMember[]
+  contexts  WorkspaceContext[]
+  prospects Prospect[]
+  deals     Deal[]
+  agentRuns AgentRun[]
+
+  @@map("workspace")
+}
+
+// Versioned workspace context (offer/ICP/tone/pricing) — see ADR/data-architecture:
+// never overwritten in place, a new row is inserted per version so past AgentRuns
+// remain explainable against the context that produced them.
+model WorkspaceContext {
+  id               String   @id @default(uuid())
+  workspaceId      String   @map("workspace_id")
+  offerDescription String   @map("offer_description")
+  icpDescription   String   @map("icp_description")
+  tone             String
+  pricingSummary   String?  @map("pricing_summary")
+  version          Int
+  updatedAt        DateTime @default(now()) @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, version])
+  @@index([workspaceId])
+  @@map("workspace_context")
+}
+
+model WorkspaceMember {
+  id          String        @id @default(uuid())
+  workspaceId String        @map("workspace_id")
+  userId      String        @map("user_id")
+  role        WorkspaceRole
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId])
+  @@map("workspace_member")
+}
+
+model Prospect {
+  id          String   @id @default(uuid())
+  workspaceId String   @map("workspace_id")
+  fullName    String   @map("full_name")
+  company     String?
+  roleTitle   String?  @map("role_title")
+  rawNotes    String?  @map("raw_notes")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deals     Deal[]
+  agentRuns AgentRun[]
+
+  @@index([workspaceId])
+  @@map("prospect")
+}
+
+model Deal {
+  id              String    @id @default(uuid())
+  workspaceId     String    @map("workspace_id")
+  prospectId      String    @map("prospect_id")
+  stage           DealStage
+  estimatedAmount Decimal?  @map("estimated_amount")
+  lastActionAt    DateTime? @map("last_action_at")
+
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  prospect    Prospect         @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  stageEvents DealStageEvent[]
+  agentRuns   AgentRun[]
+
+  @@index([workspaceId])
+  @@index([prospectId])
+  @@map("deal")
+}
+
+// Insert-only audit trail of stage transitions — never updated (see data-architecture.md).
+model DealStageEvent {
+  id         String     @id @default(uuid())
+  dealId     String     @map("deal_id")
+  fromStage  DealStage? @map("from_stage")
+  toStage    DealStage  @map("to_stage")
+  occurredAt DateTime   @default(now()) @map("occurred_at")
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@map("deal_stage_event")
+}
+
+model Agent {
+  id         String     @id @default(uuid())
+  code       String     @unique
+  name       String
+  functionId String     @map("function_id")
+  modelClass ModelClass @map("model_class")
+  scope      AgentScope
+
+  promptVersions AgentPromptVersion[]
+
+  @@map("agent")
+}
+
+// Prompt templates are versioned data, not code (ADR-005, governance.md).
+// isActive marks the single version served for new runs; older versions are kept for audit.
+model AgentPromptVersion {
+  id            String  @id @default(uuid())
+  agentId       String  @map("agent_id")
+  versionNumber Int     @map("version_number")
+  template      String
+  inputSchema   Json    @map("input_schema")
+  outputSchema  Json    @map("output_schema")
+  isActive      Boolean @default(false) @map("is_active")
+
+  agent Agent      @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  runs  AgentRun[]
+
+  @@unique([agentId, versionNumber])
+  @@index([agentId])
+  @@map("agent_prompt_version")
+}
+
+// Insert-only audit log of every agent execution (FR-7, security-architecture.md).
+// output_payload is structured JSON conforming to the agent's output_schema,
+// never a free-text summary used as source of truth (BR-7).
+model AgentRun {
+  id                   String         @id @default(uuid())
+  workspaceId          String         @map("workspace_id")
+  agentPromptVersionId String         @map("agent_prompt_version_id")
+  prospectId           String?        @map("prospect_id")
+  dealId               String?        @map("deal_id")
+  triggeredByUserId    String         @map("triggered_by_user_id")
+  inputPayload         Json           @map("input_payload")
+  outputPayload        Json?          @map("output_payload")
+  modelUsed            String         @map("model_used")
+  tokensIn             Int?           @map("tokens_in")
+  tokensOut            Int?           @map("tokens_out")
+  estimatedCost        Decimal?       @map("estimated_cost")
+  status               AgentRunStatus
+  createdAt            DateTime       @default(now()) @map("created_at")
+
+  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  agentPromptVersion AgentPromptVersion @relation(fields: [agentPromptVersionId], references: [id])
+  prospect           Prospect?          @relation(fields: [prospectId], references: [id])
+  deal               Deal?              @relation(fields: [dealId], references: [id])
+  triggeredBy        User               @relation("AgentRunTriggeredBy", fields: [triggeredByUserId], references: [id])
+
+  @@index([workspaceId])
+  @@index([prospectId])
+  @@index([dealId])
+  @@map("agent_run")
+}
