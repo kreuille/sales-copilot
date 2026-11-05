@@ -44,9 +44,12 @@ WIDTH_Y = 170.0
 
 # Matrice de fixation : 20 perçages sur le rectangle situé à EDGE_OFFSET des bords.
 # 7 perçages par grand côté (coins inclus) et 5 par petit côté (coins inclus)
-# => 2*7 + 2*(5-2) = 20, pas de 38.33 mm (grands côtés) et 37.5 mm (petits côtés) :
-# c'est la répartition la plus uniforme possible à 20 perçages sur un rectangle 230 x 150.
-EDGE_OFFSET = 10.0
+# => 2*7 + 2*(5-2) = 20, pas de 39.17 mm (grands côtés) et 38.75 mm (petits côtés) :
+# la répartition la plus uniforme possible à 20 perçages sur un rectangle 235 x 155.
+# Rangée repoussée vers l'extérieur (7.5 mm du bord au lieu de 10) pour dégager le verre
+# 224.6 x 140.6 : 3.25 mm de matière de chaque côté du lamage Ø8.5 (bord / cuve) et entre le
+# logement du verre et les avant-trous de la base.
+EDGE_OFFSET = 7.5
 N_HOLES_X = 7
 N_HOLES_Y = 5
 
@@ -58,7 +61,12 @@ VAT_X, VAT_Y, VAT_R = 210.0, 130.0, 10.0          # cuve du cadre (traversante, 
 CAVITY_X, CAVITY_Y = 190.0, 110.0                 # cavité O2 du spacer
 GROOVE_HALF_X, GROOVE_HALF_Y, GROOVE_CORNER_R = 102.0, 62.0, 5.0   # axe médian des gorges
 WINDOW_X, WINDOW_Y = 190.0, 110.0                 # fenêtre optique
-SHOULDER_X, SHOULDER_Y = 198.0, 118.0             # logement quartz
+GLASS_X, GLASS_Y, GLASS_T = 224.6, 140.6, 4.6      # plaque de verre / quartz
+GLASS_CORNER_R = 18.6                             # rayon des angles du verre
+GLASS_CLEARANCE = 0.3                             # jeu par côté dans le logement
+SHOULDER_X = GLASS_X + 2 * GLASS_CLEARANCE        # logement du verre (225.2 x 141.2)
+SHOULDER_Y = GLASS_Y + 2 * GLASS_CLEARANCE
+SHOULDER_R = GLASS_CORNER_R + GLASS_CLEARANCE     # rayon des angles du logement (18.9)
 
 D_M5_TAP = 4.2        # avant-trou M5 (filetage non modélisé)
 D_M3_TAP = 2.5        # avant-trou M3 (filetage non modélisé)
@@ -373,9 +381,9 @@ def build_base(comp):
     sk.sketchCurves.sketchLines.addCenterPointRectangle(P(0, 0), P(WINDOW_X / 2.0, WINDOW_Y / 2.0))
     cut(comp, sk.profiles.item(0), 'Base_T + 1 mm')
 
-    # Épaulement carreau quartz 198 x 118, profondeur 4.8
-    sk = new_sketch(comp, top, 'Epaulement_quartz_198x118')
-    sk.sketchCurves.sketchLines.addCenterPointRectangle(P(0, 0), P(SHOULDER_X / 2.0, SHOULDER_Y / 2.0))
+    # Logement du verre 224.6 x 140.6 (+ jeu), angles R18.6 (+ jeu), profondeur Shoulder_Depth
+    sk = new_sketch(comp, top, 'Logement_verre')
+    draw_rounded_rect(sk, SHOULDER_X / 2.0, SHOULDER_Y / 2.0, SHOULDER_R)
     cut(comp, sk.profiles.item(0), 'Shoulder_Depth')
 
     # 20 avant-trous borgnes Ø3.3 x 10 (taraudage M4 final), coïncidents avec la matrice
