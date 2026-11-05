@@ -74,14 +74,18 @@ D_M5_TAP = 4.2        # avant-trou M5 (filetage non modélisé)
 D_M3_TAP = 2.5        # avant-trou M3 (filetage non modélisé)
 # Circuit pneumatique : le spacer (1.2 mm) ne peut pas recevoir de raccord. Les raccords M5 / M3 sont
 # percés dans les flancs de la BASE ; un canal vertical monte de chaque forage jusqu'à une fente
-# Ø1.0 (rainure traversante) découpée dans le spacer, qui débouche dans la cavité O2.
-D_CHAN_M5 = 2.0       # canal vertical dans la base (voie M5)
-D_CHAN_M3 = 1.5       # canal vertical dans la base (voie M3, capteur SDP810)
-SLOT_W = 1.0          # fente oblongue Ø1.0 dans le spacer
-DISTRIB_LEN = 40.0    # longueur de la fente répartitrice le long de la paroi de la chambre (hors tout)
-SLOT_OVERLAP = 0.1    # la fente déborde de 0.1 mm dans la cavité (vide) pour une ouverture franche
-PORT_STOP_Y = 76.0    # fond des forages M5 des grands côtés / position du canal vertical (|y|)
-PORT_STOP_X = 116.0   # fond des forages des petits côtés / position du canal vertical (|x|)
+# découpée dans le spacer, qui débouche dans la cavité O2.
+# Règle de débit : aucune section ne doit être plus petite que celle du forage taraudé.
+#   - le canal vertical a le MÊME diamètre que le forage (pas de rétrécissement) ;
+#   - la fente de liaison du spacer est rectangulaire, sa largeur est calculée pour que
+#     largeur x Spacer_T >= section du forage (voir connector_width) ;
+#   - la liaison débouche directement sur la paroi de la chambre, le répartiteur ne fait que s'y ajouter.
+SLOT_W = 1.0          # largeur du répartiteur (fente le long de la paroi)
+DISTRIB_LEN = 40.0    # longueur du répartiteur le long de la paroi de la chambre (hors tout)
+SLOT_OVERLAP = 0.1    # les fentes débordent de 0.1 mm dans la cavité (vide) pour une ouverture franche
+PORT_STOP_Y = 76.0    # axe du canal vertical des voies des grands côtés (|y|)
+PORT_STOP_X = 118.0   # axe du canal vertical des voies des petits côtés (|x|)
+FLOW_MARGIN = 1.05    # marge de section par rapport au forage
 
 # =============================================================================
 # USER PARAMETERS Fusion (nom, valeur en mm, commentaire)
@@ -291,12 +295,18 @@ def pneumatic_ports():
     for sy in (-1, 1):
         for vx in (-vent_x, vent_x):
             ports.append(dict(name='Event_M5_x{:+.0f}_y{:+d}'.format(vx, sy), axis='y', sign=sy,
-                              across=vx, stop=PORT_STOP_Y, tap=D_M5_TAP, chan=D_CHAN_M5))
+                              across=vx, stop=PORT_STOP_Y, tap=D_M5_TAP, chan=D_M5_TAP))
     ports.append(dict(name='Port_injection_M5', axis='x', sign=+1, across=port_y,
-                      stop=PORT_STOP_X, tap=D_M5_TAP, chan=D_CHAN_M5))
+                      stop=PORT_STOP_X, tap=D_M5_TAP, chan=D_M5_TAP))
     ports.append(dict(name='Port_SDP810_M3', axis='x', sign=-1, across=-port_y,
-                      stop=PORT_STOP_X, tap=D_M3_TAP, chan=D_CHAN_M3))
+                      stop=PORT_STOP_X, tap=D_M3_TAP, chan=D_M3_TAP))
     return ports
+
+
+def connector_width(p, spacer_t):
+    """Largeur (mm, arrondie au 0.5 supérieur) de la fente de liaison : section >= forage."""
+    area = math.pi * (p['tap'] / 2.0) ** 2 * FLOW_MARGIN
+    return math.ceil(area / spacer_t * 2.0) / 2.0
 
 
 def port_xy(p):
@@ -373,9 +383,10 @@ def build_spacer(comp):
     Spacer 1.2 mm : cale plate, sans gorge (le joint est dans le cadre) et sans fond. La cavité
     190 x 110 est traversante ; le fond de la chambre est le verre posé dans la base.
     Chaque voie pneumatique comporte, dans la paroi du spacer :
+      - une fente de liaison rectangulaire, du canal vertical de la base jusqu'à la paroi de la
+        chambre, assez large pour ne pas freiner le débit (section >= forage M5 / M3) ;
       - une fente répartitrice de 1.0 mm, COLLÉE À LA PAROI de la chambre, parallèle au bord et
-        ouverte vers l'intérieur de la chambre sur toute sa longueur (DISTRIB_LEN) ;
-      - une fente de liaison (en T, au milieu de la précédente) vers le canal vertical de la base.
+        ouverte vers l'intérieur de la chambre sur toute sa longueur (DISTRIB_LEN).
     """
     make_plate(comp, 'Spacer_T', 'Spacer_Pneumatique')
     top = comp.xYConstructionPlane
@@ -389,20 +400,25 @@ def build_spacer(comp):
     cut(comp, sk.profiles.item(0), 'Spacer_T + 1 mm')
 
     cav_hx, cav_hy = CAVITY_X / 2.0, CAVITY_Y / 2.0
+    spacer_t = p_mm('Spacer_T')
     half = (DISTRIB_LEN - SLOT_W) / 2.0           # demi-longueur centre à centre du répartiteur
     off = SLOT_W / 2.0 - SLOT_OVERLAP             # axe du répartiteur : juste derrière la paroi
-    sk = new_sketch(comp, top, 'Fentes_oblongues_1_0')
+    sk = new_sketch(comp, top, 'Fentes_liaison_et_repartiteurs')
+    rects = sk.sketchCurves.sketchLines
     for p in pneumatic_ports():
-        x2, y2 = port_xy(p)
+        w = connector_width(p, spacer_t)
+        end = p['stop'] + p['chan'] / 2.0 + 0.4   # la liaison recouvre entièrement le canal vertical
         if p['axis'] == 'y':                      # voie sur un grand côté : paroi y = +/- 55
             wall = p['sign'] * (cav_hy + off)
-            draw_slot(sk, (p['across'], wall), (x2, y2), SLOT_W)                       # liaison
-            draw_slot(sk, (p['across'] - half, wall), (p['across'] + half, wall), SLOT_W)  # répartiteur
+            y1, y2 = sorted((p['sign'] * (cav_hy - SLOT_OVERLAP), p['sign'] * end))
+            rects.addTwoPointRectangle(P(p['across'] - w / 2.0, y1), P(p['across'] + w / 2.0, y2))
+            draw_slot(sk, (p['across'] - half, wall), (p['across'] + half, wall), SLOT_W)
         else:                                     # voie sur un petit côté : paroi x = +/- 95
             wall = p['sign'] * (cav_hx + off)
-            draw_slot(sk, (wall, p['across']), (x2, y2), SLOT_W)
+            x1, x2 = sorted((p['sign'] * (cav_hx - SLOT_OVERLAP), p['sign'] * end))
+            rects.addTwoPointRectangle(P(x1, p['across'] - w / 2.0), P(x2, p['across'] + w / 2.0))
             draw_slot(sk, (wall, p['across'] - half), (wall, p['across'] + half), SLOT_W)
-    # Les fentes se chevauchent en T : on découpe toutes les régions du croquis (= leur union)
+    # Les formes se chevauchent : on découpe toutes les régions du croquis (= leur union)
     cut(comp, all_profiles(sk), 'Spacer_T + 1 mm')
 
 
@@ -452,19 +468,23 @@ def build_base(comp):
     xz, yz = comp.xZConstructionPlane, comp.yZConstructionPlane
     ports = pneumatic_ports()
     for p in ports:
+        # Le forage va jusqu'au bord intérieur du canal (stop - rayon) : le canal, de même
+        # diamètre, tombe entièrement dans le forage -> coude sans rétrécissement.
+        end = p['stop'] - p['tap'] / 2.0
         if p['axis'] == 'y':
-            cut_bore(comp, xz, (p['across'], 0.0, port_z), p['sign'] * p['stop'], p['sign'],
-                     out_y - p['stop'], p['tap'], p['name'])
+            cut_bore(comp, xz, (p['across'], 0.0, port_z), p['sign'] * end, p['sign'],
+                     out_y - end, p['tap'], p['name'])
         else:
-            cut_bore(comp, yz, (0.0, p['across'], port_z), p['sign'] * p['stop'], p['sign'],
-                     out_x - p['stop'], p['tap'], p['name'])
+            cut_bore(comp, yz, (0.0, p['across'], port_z), p['sign'] * end, p['sign'],
+                     out_x - end, p['tap'], p['name'])
 
-    # Canaux verticaux depuis la face supérieure jusqu'à l'axe des forages
-    sk = new_sketch(comp, top, 'Canaux_verticaux')
-    for p in ports:
-        x, y = port_xy(p)
-        sk.sketchCurves.sketchCircles.addByCenterRadius(P(x, y), mm(p['chan'] / 2.0))
-    cut(comp, all_profiles(sk), 'Base_T / 2')
+    # Canaux verticaux (même Ø que le forage) de la face supérieure jusqu'au fond du forage
+    for tap in sorted({p['tap'] for p in ports}, reverse=True):
+        sk = new_sketch(comp, top, 'Canaux_verticaux_D{}'.format(tap))
+        for p in (q for q in ports if q['tap'] == tap):
+            x, y = port_xy(p)
+            sk.sketchCurves.sketchCircles.addByCenterRadius(P(x, y), mm(tap / 2.0))
+        cut(comp, all_profiles(sk), 'Base_T / 2 + {} mm'.format(tap / 2.0))
 
 
 # =============================================================================
