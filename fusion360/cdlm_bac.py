@@ -5,17 +5,16 @@ Bac CDLM (Continuous Dielectric Liquid Masking) - assemblage paramétrique Fusio
 Génère un nouveau document avec 5 composants empilés de haut en bas :
     1. Cadre supérieur de pression (réservoir de résine)
     2. Membrane PFA (film)
-    3. Contre-bride de serrage du film
-    4. Châssis intermédiaire / spacer (joint plat, chambre à oxygène)
+    3. Contre-bride / spacer 1.0 mm (serre le film, porte cavité et canaux pneumatiques)
+    4. Joint plat 0.2 mm (étanchéité air entre la contre-bride et la base / le verre)
     5. Base optique support (verre)
 
-Étanchéité (pression faible) :
-  * résine : le film est pincé entre le cadre (gorge + joint torique) et la contre-bride, tenue par
-    20 vis M3 PROPRES (taraudées dans le cadre) -> cadre + film + contre-bride = ensemble étanche,
-    qui se monte seul avant d'ajouter le spacer ;
-  * air : le spacer (feuille de joint plat 1.2 mm) est pincé entre la contre-bride et la base / le
-    verre ; sous le verre, un joint plat de 0.2 mm (4.8 - 4.6) sur le palier du logement met le
-    verre à fleur de la face de la base.
+Film à 1.2 mm du verre = contre-bride 1.0 + joint plat 0.2 (verre à fleur de la face de la base :
+verre 4.6 + joint plat de 0.2 sur le palier du logement = 4.8). Étanchéité (pression faible) :
+  * résine : film pincé entre le cadre (gorge + joint torique) et la contre-bride, tenue par 12 vis
+    M3 PROPRES, taraudées dans le cadre ; leurs têtes basses logent dans des poches de la base
+    -> cadre + film + contre-bride = ensemble étanche, monté avant la base ;
+  * air : joint plat 0.2 mm entre la contre-bride et la base / le verre.
 
 Principes de robustesse
 -----------------------
@@ -69,13 +68,10 @@ D_PILOT = 3.3         # avant-trou taraudage M4
 VAT_X, VAT_Y, VAT_R = 210.0, 130.0, 10.0          # cuve du cadre (traversante, congés R10)
 CAVITY_X, CAVITY_Y = 190.0, 110.0                 # cavité O2 du spacer
 # Joint torique UNIQUE, dans la face inférieure du cadre : il presse le film sur la contre-bride.
-# Axe médian à 3.2 mm de la cuve (108.2 x 68.2, R13.2), pour laisser la place aux vis M3 de serrage.
-GROOVE_HALF_X, GROOVE_HALF_Y, GROOVE_CORNER_R, GROOVE_W = 108.2, 68.2, 13.2, 1.8
-# Contre-bride (anneau de serrage du film) : même contour que les plaques, ouverture = cavité du spacer.
-RING_OPEN_X, RING_OPEN_Y = CAVITY_X, CAVITY_Y
-CLAMP_HALF_X, CLAMP_HALF_Y = 112.0, 72.0   # rectangle des 20 vis M3 de serrage (entre la gorge et les vis M4)
-D_M3_CLEAR = 3.4      # passage de vis M3 (film + contre-bride)
-D_M3_HEAD = 6.0       # lamage tête CHC M3 basse (contre-bride, face inférieure)
+# Axe médian à 110 x 70 mm (R12), entre la cuve (105 x 65) et la rangée de vis (bord à 115.25).
+GROOVE_HALF_X, GROOVE_HALF_Y, GROOVE_CORNER_R, GROOVE_W = 110.0, 70.0, 12.0, 1.8
+D_M3_CLEAR = 3.4      # passage de vis M3 (film, contre-bride)
+D_M3_HEAD_HOLE = 6.4  # logement de tête M3 basse (joint plat, poche de la base)
 WINDOW_X, WINDOW_Y = 190.0, 110.0                 # fenêtre optique
 GLASS_X, GLASS_Y, GLASS_T = 224.6, 140.6, 4.6      # plaque de verre / quartz
 GLASS_CORNER_R = 18.6                             # rayon des angles du verre
@@ -92,7 +88,7 @@ D_M3_TAP = 2.5        # avant-trou M3 (filetage non modélisé)
 # Règle de débit : aucune section ne doit être plus petite que celle du forage taraudé.
 #   - le canal vertical a le MÊME diamètre que le forage (pas de rétrécissement) ;
 #   - la fente de liaison du spacer est rectangulaire, sa largeur est calculée pour que
-#     largeur x Spacer_T >= section du forage (voir connector_width) ;
+#     largeur x Clamp_T >= section du forage (voir connector_width) ;
 #   - la liaison débouche directement sur la paroi de la chambre, le répartiteur ne fait que s'y ajouter.
 SLOT_W = 1.0          # largeur du répartiteur (fente le long de la paroi)
 DISTRIB_LEN = 40.0    # longueur du répartiteur le long de la paroi de la chambre (hors tout)
@@ -108,10 +104,10 @@ USER_PARAMS = [
     ('Frame_H', 60.0, "Hauteur du cadre superieur (50 resine + 10 garde)"),
     ('Counterbore_Depth', 48.0, "Profondeur des lamages Ø8.5 (tetes CHC M4)"),
     ('Membrane_T', 0.075, "Epaisseur membrane PFA (75 um)"),
-    ('Clamp_T', 4.0, "Epaisseur de la contre-bride de serrage du film"),
-    ('Clamp_CB_Depth', 2.5, "Profondeur des lamages M3 de la contre-bride"),
+    ('Clamp_T', 1.0, "Epaisseur de la contre-bride / spacer (rigide)"),
+    ('Gasket_T', 0.2, "Epaisseur du joint plat (air)"),
     ('Clamp_Screw_Depth', 8.0, "Profondeur des taraudages M3 de serrage (cadre)"),
-    ('Spacer_T', 1.2, "Epaisseur du spacer pneumatique (joint plat)"),
+    ('Head_Pocket_Depth', 2.5, "Profondeur des poches de tete M3 (base)"),
     ('Groove_D', 1.1, "Profondeur de la gorge de joint torique (cadre)"),
     ('Base_T', 14.0, "Epaisseur de la base optique"),
     ('Shoulder_Depth', 4.8, "Profondeur du logement quartz"),
@@ -288,15 +284,20 @@ def hole_positions():
 
 def clamp_screw_positions():
     """
-    20 vis M3 de serrage du film, sur le rectangle CLAMP_HALF_X x CLAMP_HALF_Y, placées au milieu
-    de deux perçages M4 voisins (jeu maximal) : 6 par grand côté, 4 par petit côté.
+    12 vis M3 de serrage du film, sur la MÊME rangée que les vis M4, intercalées entre elles
+    (au milieu de deux perçages M4 voisins). On évite les positions des évents et des ports
+    (canaux verticaux de la base) : 4 par grand côté, 2 par petit côté.
     """
+    hx = LENGTH_X / 2.0 - EDGE_OFFSET
+    hy = WIDTH_Y / 2.0 - EDGE_OFFSET
     _, xs, ys = hole_positions()
     mx = [(xs[i] + xs[i + 1]) / 2.0 for i in range(len(xs) - 1)]
     my = [(ys[i] + ys[i + 1]) / 2.0 for i in range(len(ys) - 1)]
-    pts = [(x, sy * CLAMP_HALF_Y) for x in mx for sy in (-1, 1)]
-    pts += [(sx * CLAMP_HALF_X, y) for y in my for sx in (-1, 1)]
-    assert len(pts) == 20, "Il doit y avoir 20 vis de serrage"
+    vent_x = (xs[N_HOLES_X // 2 + 1] + xs[N_HOLES_X // 2 + 2]) / 2.0
+    port_y = (ys[N_HOLES_Y // 2] + ys[N_HOLES_Y // 2 + 1]) / 2.0
+    pts = [(x, sy * hy) for x in mx if abs(abs(x) - vent_x) > 1.0 for sy in (-1, 1)]
+    pts += [(sx * hx, y) for y in my if abs(abs(y) - port_y) > 1.0 for sx in (-1, 1)]
+    assert len(pts) == 12, "Il doit y avoir 12 vis de serrage"
     return pts
 
 
@@ -339,10 +340,10 @@ def pneumatic_ports():
     return ports
 
 
-def connector_width(p, spacer_t):
+def connector_width(p, thickness):
     """Largeur (mm, arrondie au 0.5 supérieur) de la fente de liaison : section >= forage."""
     area = math.pi * (p['tap'] / 2.0) ** 2 * FLOW_MARGIN
-    return math.ceil(area / spacer_t * 2.0) / 2.0
+    return math.ceil(area / thickness * 2.0) / 2.0
 
 
 def port_xy(p):
@@ -393,8 +394,8 @@ def build_frame(comp):
     cut_hole_pattern(comp, D_THROUGH, 'Frame_H + 1 mm', 'Percages_4_5')
     cut_hole_pattern(comp, D_COUNTERBORE, 'Counterbore_Depth', 'Lamages_8_5')
 
-    # 20 taraudages M3 borgnes (avant-trou Ø2.5) dans la FACE INFÉRIEURE : vis de serrage de la
-    # contre-bride, qui tiennent l'ensemble cadre + film + contre-bride sans le spacer.
+    # 12 taraudages M3 borgnes (avant-trou Ø2.5) dans la FACE INFÉRIEURE : vis de serrage de la
+    # contre-bride, qui tiennent l'ensemble cadre + film + contre-bride sans la base.
     cut_circles(comp, clamp_screw_positions(), D_M3_TAP, 'Clamp_Screw_Depth', 'Taraudages_M3_serrage',
                 start='-Frame_H', toward=+1)
 
@@ -419,60 +420,23 @@ def build_membrane(comp):
 
 
 # =============================================================================
-# COMPOSANT 3 - CONTRE-BRIDE DE SERRAGE DU FILM
+# COMPOSANT 3 - CONTRE-BRIDE / SPACER (1.0 mm)
 # =============================================================================
-def build_clamp_ring(comp):
+def draw_pneumatic_paths(sk, thickness):
     """
-    Contre-bride 250 x 170 x Clamp_T : elle plaque le film contre la face inférieure du cadre.
-    Ouverture = cavité du spacer (190 x 110) ; 20 passages M4 (assemblage final) ; 20 passages M3
-    avec lamage de tête côté spacer (face inférieure), pour que le spacer pose à plat.
-    """
-    make_plate(comp, 'Clamp_T', 'Contre_bride')
-    top = comp.xYConstructionPlane
-
-    sk = new_sketch(comp, top, 'Ouverture_190x110')
-    sk.sketchCurves.sketchLines.addCenterPointRectangle(P(0, 0), P(RING_OPEN_X / 2.0, RING_OPEN_Y / 2.0))
-    cut(comp, sk.profiles.item(0), 'Clamp_T + 1 mm')
-
-    cut_hole_pattern(comp, D_THROUGH, 'Clamp_T + 1 mm', 'Percages_4_5')
-    pts = clamp_screw_positions()
-    cut_circles(comp, pts, D_M3_CLEAR, 'Clamp_T + 1 mm', 'Percages_M3_serrage')
-    # lamages des têtes M3, depuis la face inférieure (départ Z=-Clamp_T, vers le haut)
-    cut_circles(comp, pts, D_M3_HEAD, 'Clamp_CB_Depth', 'Lamages_M3_serrage', start='-Clamp_T', toward=+1)
-
-
-# =============================================================================
-# COMPOSANT 4 - SPACER / CŒUR PNEUMATIQUE
-# =============================================================================
-def build_spacer(comp):
-    """
-    Spacer 1.2 mm : cale plate, sans gorge (le joint est dans le cadre) et sans fond. La cavité
-    190 x 110 est traversante ; le fond de la chambre est le verre posé dans la base.
-    Chaque voie pneumatique comporte, dans la paroi du spacer :
+    Dessine, dans l'esquisse `sk` (plan XY), les 6 voies pneumatiques de la paroi de la cavité :
       - une fente de liaison rectangulaire, du canal vertical de la base jusqu'à la paroi de la
-        chambre, assez large pour ne pas freiner le débit (section >= forage M5 / M3) ;
+        chambre, assez large pour ne pas freiner le débit (largeur x `thickness` >= section du forage) ;
       - une fente répartitrice de 1.0 mm, COLLÉE À LA PAROI de la chambre, parallèle au bord et
         ouverte vers l'intérieur de la chambre sur toute sa longueur (DISTRIB_LEN).
+    Les formes se chevauchent : couper toutes les régions de l'esquisse coupe leur union.
     """
-    make_plate(comp, 'Spacer_T', 'Spacer_Pneumatique')
-    top = comp.xYConstructionPlane
-
-    # 20 passages de vis Ø4.5 (même matrice que les autres pièces)
-    cut_hole_pattern(comp, D_THROUGH, 'Spacer_T + 1 mm', 'Percages_4_5')
-
-    # Cavité de la chambre à oxygène 190 x 110 traversante
-    sk = new_sketch(comp, top, 'Cavite_190x110')
-    sk.sketchCurves.sketchLines.addCenterPointRectangle(P(0, 0), P(CAVITY_X / 2.0, CAVITY_Y / 2.0))
-    cut(comp, sk.profiles.item(0), 'Spacer_T + 1 mm')
-
     cav_hx, cav_hy = CAVITY_X / 2.0, CAVITY_Y / 2.0
-    spacer_t = p_mm('Spacer_T')
     half = (DISTRIB_LEN - SLOT_W) / 2.0           # demi-longueur centre à centre du répartiteur
     off = SLOT_W / 2.0 - SLOT_OVERLAP             # axe du répartiteur : juste derrière la paroi
-    sk = new_sketch(comp, top, 'Fentes_liaison_et_repartiteurs')
     rects = sk.sketchCurves.sketchLines
     for p in pneumatic_ports():
-        w = connector_width(p, spacer_t)
+        w = connector_width(p, thickness)
         end = p['stop'] + p['chan'] / 2.0 + 0.4   # la liaison recouvre entièrement le canal vertical
         if p['axis'] == 'y':                      # voie sur un grand côté : paroi y = +/- 55
             wall = p['sign'] * (cav_hy + off)
@@ -484,8 +448,51 @@ def build_spacer(comp):
             x1, x2 = sorted((p['sign'] * (cav_hx - SLOT_OVERLAP), p['sign'] * end))
             rects.addTwoPointRectangle(P(x1, p['across'] - w / 2.0), P(x2, p['across'] + w / 2.0))
             draw_slot(sk, (wall, p['across'] - half), (wall, p['across'] + half), SLOT_W)
-    # Les formes se chevauchent : on découpe toutes les régions du croquis (= leur union)
-    cut(comp, all_profiles(sk), 'Spacer_T + 1 mm')
+
+
+def build_clamp_spacer(comp):
+    """
+    Contre-bride / spacer 1.0 mm, rigide : elle plaque le film contre la face inférieure du cadre
+    (gorge + joint torique) et fixe l'écart film-verre. Cavité 190 x 110 traversante (le fond de la
+    chambre est le verre), 20 passages M4, 12 passages M3 de serrage, et les 6 voies pneumatiques.
+    """
+    make_plate(comp, 'Clamp_T', 'Contre_bride_spacer')
+    top = comp.xYConstructionPlane
+
+    cut_hole_pattern(comp, D_THROUGH, 'Clamp_T + 1 mm', 'Percages_4_5')
+    cut_circles(comp, clamp_screw_positions(), D_M3_CLEAR, 'Clamp_T + 1 mm', 'Percages_M3_serrage')
+
+    sk = new_sketch(comp, top, 'Cavite_190x110')
+    sk.sketchCurves.sketchLines.addCenterPointRectangle(P(0, 0), P(CAVITY_X / 2.0, CAVITY_Y / 2.0))
+    cut(comp, sk.profiles.item(0), 'Clamp_T + 1 mm')
+
+    sk = new_sketch(comp, top, 'Voies_pneumatiques')
+    draw_pneumatic_paths(sk, p_mm('Clamp_T'))
+    cut(comp, all_profiles(sk), 'Clamp_T + 1 mm')
+
+
+# =============================================================================
+# COMPOSANT 4 - JOINT PLAT (0.2 mm)
+# =============================================================================
+def build_gasket(comp):
+    """
+    Joint plat 0.2 mm (feuille silicone / PTFE) entre la contre-bride et la base : étanchéité à l'air.
+    Découpes : ouverture 190 x 110, voies pneumatiques (mêmes formes que la contre-bride, pour laisser
+    passer l'air jusqu'aux canaux de la base), 20 passages M4, 12 logements de tête M3.
+    """
+    make_plate(comp, 'Gasket_T', 'Joint_plat')
+    top = comp.xYConstructionPlane
+
+    cut_hole_pattern(comp, D_THROUGH, 'Gasket_T + 1 mm', 'Percages_4_5')
+    cut_circles(comp, clamp_screw_positions(), D_M3_HEAD_HOLE, 'Gasket_T + 1 mm', 'Logements_tetes_M3')
+
+    sk = new_sketch(comp, top, 'Ouverture_190x110')
+    sk.sketchCurves.sketchLines.addCenterPointRectangle(P(0, 0), P(CAVITY_X / 2.0, CAVITY_Y / 2.0))
+    cut(comp, sk.profiles.item(0), 'Gasket_T + 1 mm')
+
+    sk = new_sketch(comp, top, 'Voies_pneumatiques')
+    draw_pneumatic_paths(sk, p_mm('Clamp_T'))
+    cut(comp, all_profiles(sk), 'Gasket_T + 1 mm')
 
 
 # =============================================================================
@@ -524,6 +531,9 @@ def build_base(comp):
 
     # 20 avant-trous borgnes Ø3.3 x 10 (taraudage M4 final), coïncidents avec la matrice
     cut_hole_pattern(comp, D_PILOT, 'Pilot_Depth', 'Avant_trous_3_3')
+
+    # 12 poches Ø6.4 pour les têtes basses des vis M3 de serrage (elles dépassent sous la contre-bride)
+    cut_circles(comp, clamp_screw_positions(), D_M3_HEAD_HOLE, 'Head_Pocket_Depth', 'Poches_tetes_M3')
 
     # --- Raccords pneumatiques M5 / M3 : forages horizontaux dans les flancs de la base --------
     # (à mi-épaisseur), arrêtés à PORT_STOP_* ; un canal vertical monte ensuite jusqu'à la face
@@ -574,15 +584,15 @@ def run(context):
         # Cote Z de la face supérieure de chaque pièce (empilement vers le bas, haut du cadre à 0)
         z_frame = 0.0
         z_membrane = z_frame - p_mm('Frame_H')
-        z_ring = z_membrane - p_mm('Membrane_T')
-        z_spacer = z_ring - p_mm('Clamp_T')
-        z_base = z_spacer - p_mm('Spacer_T')
+        z_clamp = z_membrane - p_mm('Membrane_T')
+        z_gasket = z_clamp - p_mm('Clamp_T')
+        z_base = z_gasket - p_mm('Gasket_T')
 
         parts = (
             ('1_Cadre_Superieur', z_frame, build_frame),
             ('2_Membrane_PFA', z_membrane, build_membrane),
-            ('3_Contre_Bride', z_ring, build_clamp_ring),
-            ('4_Spacer_Pneumatique', z_spacer, build_spacer),
+            ('3_Contre_Bride_Spacer', z_clamp, build_clamp_spacer),
+            ('4_Joint_Plat', z_gasket, build_gasket),
             ('5_Base_Optique', z_base, build_base),
         )
         for name, z_top, builder in parts:
@@ -593,10 +603,12 @@ def run(context):
         ui.messageBox(
             'Bac CDLM généré.\n\n'
             'Z haut de chaque pièce (mm) :\n'
-            '  Cadre        : {:.3f}\n  Membrane     : {:.3f}\n  Contre-bride : {:.3f}\n'
-            '  Spacer       : {:.3f}\n  Base         : {:.3f}\n'
-            'Fond de la base : {:.3f} mm'.format(
-                z_frame, z_membrane, z_ring, z_spacer, z_base, z_base - p_mm('Base_T')))
+            '  Cadre              : {:.3f}\n  Membrane           : {:.3f}\n'
+            '  Contre-bride/spacer: {:.3f}\n  Joint plat         : {:.3f}\n  Base               : {:.3f}\n'
+            'Fond de la base : {:.3f} mm\n'
+            'Ecart film - verre : {:.2f} mm'.format(
+                z_frame, z_membrane, z_clamp, z_gasket, z_base, z_base - p_mm('Base_T'),
+                p_mm('Clamp_T') + p_mm('Gasket_T')))
     except Exception:
         if ui:
             ui.messageBox('Échec du script :\n{}'.format(traceback.format_exc()))
