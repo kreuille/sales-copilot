@@ -78,6 +78,8 @@ D_M3_TAP = 2.5        # avant-trou M3 (filetage non modélisé)
 D_CHAN_M5 = 2.0       # canal vertical dans la base (voie M5)
 D_CHAN_M3 = 1.5       # canal vertical dans la base (voie M3, capteur SDP810)
 SLOT_W = 1.0          # fente oblongue Ø1.0 dans le spacer
+DISTRIB_LEN = 40.0    # longueur de la fente répartitrice le long de la paroi de la chambre (hors tout)
+SLOT_OVERLAP = 0.1    # la fente déborde de 0.1 mm dans la cavité (vide) pour une ouverture franche
 PORT_STOP_Y = 76.0    # fond des forages M5 des grands côtés / position du canal vertical (|y|)
 PORT_STOP_X = 116.0   # fond des forages des petits côtés / position du canal vertical (|x|)
 
@@ -370,8 +372,10 @@ def build_spacer(comp):
     """
     Spacer 1.2 mm : cale plate, sans gorge (le joint est dans le cadre) et sans fond. La cavité
     190 x 110 est traversante ; le fond de la chambre est le verre posé dans la base.
-    Chaque voie pneumatique arrive par une fente oblongue Ø1.0 traversante (1.2 mm de haut une fois
-    prise entre la membrane et la base), qui part de la cavité et va jusqu'au canal vertical de la base.
+    Chaque voie pneumatique comporte, dans la paroi du spacer :
+      - une fente répartitrice de 1.0 mm, COLLÉE À LA PAROI de la chambre, parallèle au bord et
+        ouverte vers l'intérieur de la chambre sur toute sa longueur (DISTRIB_LEN) ;
+      - une fente de liaison (en T, au milieu de la précédente) vers le canal vertical de la base.
     """
     make_plate(comp, 'Spacer_T', 'Spacer_Pneumatique')
     top = comp.xYConstructionPlane
@@ -384,16 +388,21 @@ def build_spacer(comp):
     sk.sketchCurves.sketchLines.addCenterPointRectangle(P(0, 0), P(CAVITY_X / 2.0, CAVITY_Y / 2.0))
     cut(comp, sk.profiles.item(0), 'Spacer_T + 1 mm')
 
-    # Fentes oblongues : de 1.5 mm à l'intérieur de la cavité (vide) jusqu'au canal de la base
     cav_hx, cav_hy = CAVITY_X / 2.0, CAVITY_Y / 2.0
+    half = (DISTRIB_LEN - SLOT_W) / 2.0           # demi-longueur centre à centre du répartiteur
+    off = SLOT_W / 2.0 - SLOT_OVERLAP             # axe du répartiteur : juste derrière la paroi
     sk = new_sketch(comp, top, 'Fentes_oblongues_1_0')
     for p in pneumatic_ports():
         x2, y2 = port_xy(p)
-        if p['axis'] == 'y':
-            c1 = (p['across'], p['sign'] * (cav_hy - 1.5))
-        else:
-            c1 = (p['sign'] * (cav_hx - 1.5), p['across'])
-        draw_slot(sk, c1, (x2, y2), SLOT_W)
+        if p['axis'] == 'y':                      # voie sur un grand côté : paroi y = +/- 55
+            wall = p['sign'] * (cav_hy + off)
+            draw_slot(sk, (p['across'], wall), (x2, y2), SLOT_W)                       # liaison
+            draw_slot(sk, (p['across'] - half, wall), (p['across'] + half, wall), SLOT_W)  # répartiteur
+        else:                                     # voie sur un petit côté : paroi x = +/- 95
+            wall = p['sign'] * (cav_hx + off)
+            draw_slot(sk, (wall, p['across']), (x2, y2), SLOT_W)
+            draw_slot(sk, (wall, p['across'] - half), (wall, p['across'] + half), SLOT_W)
+    # Les fentes se chevauchent en T : on découpe toutes les régions du croquis (= leur union)
     cut(comp, all_profiles(sk), 'Spacer_T + 1 mm')
 
 
