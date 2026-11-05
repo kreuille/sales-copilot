@@ -69,7 +69,15 @@ VAT_X, VAT_Y, VAT_R = 210.0, 130.0, 10.0          # cuve du cadre (traversante, 
 CAVITY_X, CAVITY_Y = 190.0, 110.0                 # cavité O2 du spacer
 # Joint torique UNIQUE, dans la face inférieure du cadre : il presse le film sur la contre-bride.
 # Axe médian à 110 x 70 mm (R12), entre la cuve (105 x 65) et la rangée de vis (bord à 115.25).
-GROOVE_HALF_X, GROOVE_HALF_Y, GROOVE_CORNER_R, GROOVE_W = 110.0, 70.0, 12.0, 1.8
+GROOVE_HALF_X, GROOVE_HALF_Y, GROOVE_CORNER_R, GROOVE_W = 110.0, 70.0, 12.0, 2.0
+ORING_CORD = 1.5      # section du joint torique : serrage = 1.5 - (gorge 1.1 + film 0.075) = 0.325 mm (22 %)
+# Jonc de tension : nervure sur la face supérieure de la contre-bride + rainure dans le cadre, entre la
+# cuve (105 x 65) et la gorge du joint torique. En serrant, la nervure enfonce le film dans la rainure :
+# la portion de film du côté de la cuve est étirée, le film extérieur étant maintenu par le serrage.
+TENSION_HALF_X, TENSION_HALF_Y, TENSION_CORNER_R = 107.0, 67.0, 12.0
+TG_W = 1.2            # largeur de la rainure (cadre) : jeu 0.15 mm par côté, film compris
+TR_W = 0.75           # largeur de la nervure (rainure - 2 x film - jeu)
+M3_LEN, M3_HEAD_D, M3_HEAD_H, M3_SHANK_D = 8.0, 5.5, 2.0, 3.0   # vis M3x8 tête basse (ISO 14580)
 D_M3_CLEAR = 3.4      # passage de vis M3 (film, contre-bride)
 D_M3_HEAD_HOLE = 6.4  # logement de tête M3 basse (joint plat, poche de la base)
 WINDOW_X, WINDOW_Y = 190.0, 110.0                 # fenêtre optique
@@ -108,6 +116,8 @@ USER_PARAMS = [
     ('Gasket_T', 0.2, "Epaisseur du joint plat (air)"),
     ('Clamp_Screw_Depth', 8.0, "Profondeur des taraudages M3 de serrage (cadre)"),
     ('Head_Pocket_Depth', 2.5, "Profondeur des poches de tete M3 (base)"),
+    ('Tension_Groove_D', 0.5, "Profondeur de la rainure du jonc de tension (cadre)"),
+    ('Tension_Rib_H', 0.4, "Hauteur de la nervure du jonc de tension (contre-bride)"),
     ('Groove_D', 1.1, "Profondeur de la gorge de joint torique (cadre)"),
     ('Base_T', 14.0, "Epaisseur de la base optique"),
     ('Shoulder_Depth', 4.8, "Profondeur du logement quartz"),
@@ -243,6 +253,28 @@ def draw_rounded_rect(sk, half_x, half_y, r):
     sk.geometricConstraints.addCoincident(a4.endSketchPoint, l1.startSketchPoint)   # fermeture
 
 
+def draw_rounded_rect_path(sk, half_x, half_y, r):
+    """
+    Même rectangle arrondi, mais le contour démarre au MILIEU du côté bas (0, -half_y) : le profil du
+    balayage (joint torique) est alors esquissé dans le plan YZ d'origine. Retourne la 1re ligne.
+    """
+    lines = sk.sketchCurves.sketchLines
+    arcs = sk.sketchCurves.sketchArcs
+    a, b = half_x, half_y
+    q = math.pi / 2.0
+    l1 = lines.addByTwoPoints(P(0, -b), P(a - r, -b))
+    a1 = arcs.addByCenterStartSweep(P(a - r, -b + r), l1.endSketchPoint, q)
+    l2 = lines.addByTwoPoints(a1.endSketchPoint, P(a, b - r))
+    a2 = arcs.addByCenterStartSweep(P(a - r, b - r), l2.endSketchPoint, q)
+    l3 = lines.addByTwoPoints(a2.endSketchPoint, P(-a + r, b))
+    a3 = arcs.addByCenterStartSweep(P(-a + r, b - r), l3.endSketchPoint, q)
+    l4 = lines.addByTwoPoints(a3.endSketchPoint, P(-a, -b + r))
+    a4 = arcs.addByCenterStartSweep(P(-a + r, -b + r), l4.endSketchPoint, q)
+    l5 = lines.addByTwoPoints(a4.endSketchPoint, P(0, -b))
+    sk.geometricConstraints.addCoincident(l5.endSketchPoint, l1.startSketchPoint)
+    return l1
+
+
 def draw_slot(sk, c1, c2, width):
     """Fente oblongue entre les centres c1 et c2 (tuples mm), largeur `width`."""
     lines = sk.sketchCurves.sketchLines
@@ -352,13 +384,13 @@ def port_xy(p):
 
 
 # --- Composants / occurrences ---------------------------------------------------------
-def new_part(root, name, z_top_mm):
+def new_part(root, name, z_top_mm, x_mm=0.0, y_mm=0.0):
     """
     Crée un composant vide, placé par une matrice de translation Z de sorte que sa face
     supérieure (Z local = 0) soit à z_top_mm dans l'assemblage.
     """
     mat = adsk.core.Matrix3D.create()
-    mat.translation = adsk.core.Vector3D.create(0.0, 0.0, mm(z_top_mm))
+    mat.translation = adsk.core.Vector3D.create(mm(x_mm), mm(y_mm), mm(z_top_mm))
     occ = root.occurrences.addNewComponent(mat)
     occ.component.name = name
     try:
@@ -407,6 +439,12 @@ def build_frame(comp):
     draw_rounded_rect(sk, GROOVE_HALF_X - GROOVE_W / 2.0, GROOVE_HALF_Y - GROOVE_W / 2.0,
                       GROOVE_CORNER_R - GROOVE_W / 2.0)
     cut(comp, ring_profile(sk), 'Groove_D', comp.xYConstructionPlane, '-Frame_H', +1)
+
+    # Rainure du jonc de tension (1.2 x 0.5), entre la cuve et la gorge du joint torique
+    sk = new_sketch(comp, comp.xYConstructionPlane, 'Rainure_jonc_tension')
+    draw_rounded_rect(sk, TENSION_HALF_X + TG_W / 2.0, TENSION_HALF_Y + TG_W / 2.0, TENSION_CORNER_R + TG_W / 2.0)
+    draw_rounded_rect(sk, TENSION_HALF_X - TG_W / 2.0, TENSION_HALF_Y - TG_W / 2.0, TENSION_CORNER_R - TG_W / 2.0)
+    cut(comp, ring_profile(sk), 'Tension_Groove_D', comp.xYConstructionPlane, '-Frame_H', +1)
 
 
 # =============================================================================
@@ -459,6 +497,14 @@ def build_clamp_spacer(comp):
     make_plate(comp, 'Clamp_T', 'Contre_bride_spacer')
     top = comp.xYConstructionPlane
 
+    # Nervure du jonc de tension (0.75 x 0.4) sur la face supérieure : elle enfonce le film dans la
+    # rainure du cadre. Réunie au corps (Join) ; les fentes pneumatiques la recoupent ensuite.
+    sk = new_sketch(comp, top, 'Nervure_jonc_tension')
+    draw_rounded_rect(sk, TENSION_HALF_X + TR_W / 2.0, TENSION_HALF_Y + TR_W / 2.0, TENSION_CORNER_R + TR_W / 2.0)
+    draw_rounded_rect(sk, TENSION_HALF_X - TR_W / 2.0, TENSION_HALF_Y - TR_W / 2.0, TENSION_CORNER_R - TR_W / 2.0)
+    extrude(comp, ring_profile(sk), 'Tension_Rib_H', adsk.fusion.FeatureOperations.JoinFeatureOperation,
+            top, 0.0, +1)
+
     cut_hole_pattern(comp, D_THROUGH, 'Clamp_T + 1 mm', 'Percages_4_5')
     cut_circles(comp, clamp_screw_positions(), D_M3_CLEAR, 'Clamp_T + 1 mm', 'Percages_M3_serrage')
 
@@ -466,9 +512,11 @@ def build_clamp_spacer(comp):
     sk.sketchCurves.sketchLines.addCenterPointRectangle(P(0, 0), P(CAVITY_X / 2.0, CAVITY_Y / 2.0))
     cut(comp, sk.profiles.item(0), 'Clamp_T + 1 mm')
 
+    # Les voies pneumatiques traversent la contre-bride ; la coupe démarre AU-DESSUS de la nervure
+    # (Z = +Tension_Rib_H) pour la recouper aussi là où elle croise une fente.
     sk = new_sketch(comp, top, 'Voies_pneumatiques')
     draw_pneumatic_paths(sk, p_mm('Clamp_T'))
-    cut(comp, all_profiles(sk), 'Clamp_T + 1 mm')
+    cut(comp, all_profiles(sk), 'Clamp_T + Tension_Rib_H + 1 mm', top, 'Tension_Rib_H', -1)
 
 
 # =============================================================================
@@ -493,6 +541,44 @@ def build_gasket(comp):
     sk = new_sketch(comp, top, 'Voies_pneumatiques')
     draw_pneumatic_paths(sk, p_mm('Clamp_T'))
     cut(comp, all_profiles(sk), 'Gasket_T + 1 mm')
+
+
+# =============================================================================
+# JOINT TORIQUE (1.5 mm) ET VIS M3 DE SERRAGE : pièces de visualisation du montage
+# =============================================================================
+def build_oring(comp):
+    """
+    Joint torique Ø1.5 : balayage d'un cercle le long de l'axe médian de la gorge du cadre
+    (rectangle 110 x 70, R12), à plat dans le plan XY local. Le profil est esquissé dans le plan YZ
+    d'origine, au milieu du côté bas, point de départ du chemin. Le joint est modélisé non comprimé :
+    son recouvrement avec le cadre et le film représente l'écrasement.
+    """
+    sk = new_sketch(comp, comp.xYConstructionPlane, 'Chemin_joint')
+    first = draw_rounded_rect_path(sk, GROOVE_HALF_X, GROOVE_HALF_Y, GROOVE_CORNER_R)
+    path = comp.features.createPath(first, True)
+
+    yz = comp.yZConstructionPlane
+    sp = new_sketch(comp, yz, 'Section_joint')
+    c = sp.modelToSketchSpace(adsk.core.Point3D.create(0.0, mm(-GROOVE_HALF_Y), 0.0))
+    sp.sketchCurves.sketchCircles.addByCenterRadius(c, mm(ORING_CORD / 2.0))
+
+    sweeps = comp.features.sweepFeatures
+    inp = sweeps.createInput(sp.profiles.item(0), path, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    feat = sweeps.add(inp)
+    feat.bodies.item(0).name = 'Joint_torique_1_5'
+
+
+def build_screw(comp):
+    """Vis M3x8 tête basse : axe en Z, plan de portée de la tête à Z=0, tige vers +Z, tête vers -Z."""
+    sk = new_sketch(comp, comp.xYConstructionPlane, 'Tige')
+    sk.sketchCurves.sketchCircles.addByCenterRadius(P(0, 0), mm(M3_SHANK_D / 2.0))
+    feat = extrude(comp, sk.profiles.item(0), M3_LEN, adsk.fusion.FeatureOperations.NewBodyFeatureOperation,
+                   comp.xYConstructionPlane, 0.0, +1)
+    feat.bodies.item(0).name = 'Vis_M3x8'
+    sk = new_sketch(comp, comp.xYConstructionPlane, 'Tete')
+    sk.sketchCurves.sketchCircles.addByCenterRadius(P(0, 0), mm(M3_HEAD_D / 2.0))
+    extrude(comp, sk.profiles.item(0), M3_HEAD_H, adsk.fusion.FeatureOperations.JoinFeatureOperation,
+            comp.xYConstructionPlane, 0.0, -1)
 
 
 # =============================================================================
@@ -599,6 +685,26 @@ def run(context):
             occ = new_part(root, name, z_top)
             builder(occ.component)
 
+        # Pièces de visualisation (joint torique, vis M3) : une erreur ici n'arrête pas l'assemblage.
+        warnings = []
+        try:
+            # centre de la section du joint : à mi-hauteur entre le fond de gorge et le dessus de la contre-bride
+            z_oring = ((z_frame - p_mm('Frame_H') + p_mm('Groove_D')) + z_clamp) / 2.0
+            occ = new_part(root, '6_Joint_torique_1_5', z_oring)
+            build_oring(occ.component)
+        except Exception:
+            warnings.append("Joint torique non généré :\n" + traceback.format_exc(limit=2))
+        try:
+            positions = clamp_screw_positions()          # plan de portée des têtes = dessous de la contre-bride
+            first = new_part(root, '7_Vis_M3x8', z_gasket, positions[0][0], positions[0][1])
+            build_screw(first.component)
+            for (x, y) in positions[1:]:
+                mat = adsk.core.Matrix3D.create()
+                mat.translation = adsk.core.Vector3D.create(mm(x), mm(y), mm(z_gasket))
+                root.occurrences.addExistingComponent(first.component, mat)
+        except Exception:
+            warnings.append("Vis M3 non générées :\n" + traceback.format_exc(limit=2))
+
         app.activeViewport.fit()
         ui.messageBox(
             'Bac CDLM généré.\n\n'
@@ -606,9 +712,10 @@ def run(context):
             '  Cadre              : {:.3f}\n  Membrane           : {:.3f}\n'
             '  Contre-bride/spacer: {:.3f}\n  Joint plat         : {:.3f}\n  Base               : {:.3f}\n'
             'Fond de la base : {:.3f} mm\n'
-            'Ecart film - verre : {:.2f} mm'.format(
+            'Ecart film - verre : {:.2f} mm{}'.format(
                 z_frame, z_membrane, z_clamp, z_gasket, z_base, z_base - p_mm('Base_T'),
-                p_mm('Clamp_T') + p_mm('Gasket_T')))
+                p_mm('Clamp_T') + p_mm('Gasket_T'),
+                ('\n\n' + '\n'.join(warnings)) if warnings else ''))
     except Exception:
         if ui:
             ui.messageBox('Échec du script :\n{}'.format(traceback.format_exc()))
