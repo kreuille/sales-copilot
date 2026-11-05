@@ -2,19 +2,22 @@
 """
 Bac CDLM (Continuous Dielectric Liquid Masking) - assemblage paramétrique Fusion 360.
 
-Génère un nouveau document avec 5 composants empilés de haut en bas :
-    1. Cadre supérieur de pression (réservoir de résine)
-    2. Membrane PFA (film)
-    3. Contre-bride / spacer 1.0 mm (serre le film, porte cavité et canaux pneumatiques)
-    4. Joint plat 0.2 mm (étanchéité air entre la contre-bride et la base / le verre)
+Génère un nouveau document avec les pièces suivantes, empilées de haut en bas :
+    1. Cadre supérieur de pression (réservoir de résine), avec un décrochement dans sa face inférieure
+    2. Membrane PFA (film), posée au plafond du décrochement
+    3. Contre-bride / spacer = PLOT de 1.0 mm qui ENTRE dans le décrochement du cadre (fixation du film)
+    4. Joint plat 0.2 mm (étanchéité air entre le plot / le cadre et la base / le verre)
     5. Base optique support (verre)
+    + joint torique Ø1.5 et 12 vis M3x8 (pièces de visualisation du montage)
 
-Film à 1.2 mm du verre = contre-bride 1.0 + joint plat 0.2 (verre à fleur de la face de la base :
-verre 4.6 + joint plat de 0.2 sur le palier du logement = 4.8). Étanchéité (pression faible) :
-  * résine : film pincé entre le cadre (gorge + joint torique) et la contre-bride, tenue par 12 vis
-    M3 PROPRES, taraudées dans le cadre ; leurs têtes basses logent dans des poches de la base
-    -> cadre + film + contre-bride = ensemble étanche, monté avant la base ;
-  * air : joint plat 0.2 mm entre la contre-bride et la base / le verre.
+Fixation et tension du film (principe du « petit élément qui rentre dans le grand ») :
+  * le film est tendu sur le plot, puis le plot est enfoncé dans le décrochement du cadre : le film est
+    PINCÉ RADIALEMENT entre la paroi du plot et celle du décrochement (jeu 0.05 mm < film 0.075 mm), ce
+    qui le tend et l'étanche à la périphérie, en dehors des canaux pneumatiques ; l'excédent est détouré ;
+  * le plot est tenu par 12 vis M3 propres (taraudées dans le cadre, têtes basses dans la base) ;
+  * un joint torique Ø1.5 dans le plafond du décrochement presse le film sur le plot autour de la cuve ;
+  * dessous du plot et face du cadre sont coplanaires : le joint plat de 0.2 mm les recouvre ensemble.
+Film à 1.2 mm du verre = plot 1.0 + joint plat 0.2 (verre à fleur de la base : 4.6 + joint 0.2 = 4.8).
 
 Principes de robustesse
 -----------------------
@@ -70,16 +73,14 @@ CAVITY_X, CAVITY_Y = 190.0, 110.0                 # cavité O2 du spacer
 # Joint torique UNIQUE, dans la face inférieure du cadre : il presse le film sur la contre-bride.
 # Axe médian à 110 x 70 mm (R12), entre la cuve (105 x 65) et la rangée de vis (bord à 115.25).
 GROOVE_HALF_X, GROOVE_HALF_Y, GROOVE_CORNER_R, GROOVE_W = 110.0, 70.0, 12.0, 2.0
-ORING_CORD = 1.5      # section du joint torique : serrage = 1.5 - (gorge 1.1 + film 0.075) = 0.325 mm (22 %)
-# Jonc de tension : nervure sur la face supérieure de la contre-bride + rainure dans le cadre, entre la
-# cuve (105 x 65) et la gorge du joint torique. En serrant, la nervure enfonce le film dans la rainure :
-# la portion de film du côté de la cuve est étirée, le film extérieur étant maintenu par le serrage.
-TENSION_HALF_X, TENSION_HALF_Y, TENSION_CORNER_R = 107.0, 67.0, 12.0
-TG_W = 1.2            # largeur de la rainure (cadre) : jeu 0.15 mm par côté, film compris
-TR_W = 0.75           # largeur de la nervure (rainure - 2 x film - jeu)
+ORING_CORD = 1.5      # section du joint torique : serrage = 1.5 - gorge 1.15 = 0.35 mm (23 %)
+# Plot (contre-bride) qui entre dans le décrochement du cadre. Il englobe la rangée de vis et les canaux
+# pneumatiques : la ligne de pincement du film est donc à l'extérieur de tout le reste.
+PLUG_HX, PLUG_HY, PLUG_R = 122.5, 81.5, 6.0   # contour du plot (aux murs du cadre : 2.45 mm en X, 3.45 mm en Y)
+PINCH_GAP = 0.05                              # jeu radial plot / décrochement (< épaisseur du film : serrage)
 M3_LEN, M3_HEAD_D, M3_HEAD_H, M3_SHANK_D = 8.0, 5.5, 2.0, 3.0   # vis M3x8 tête basse (ISO 14580)
 D_M3_CLEAR = 3.4      # passage de vis M3 (film, contre-bride)
-D_M3_HEAD_HOLE = 6.4  # logement de tête M3 basse (joint plat, poche de la base)
+D_M3_HEAD_HOLE = 5.9  # logement de tête M3 basse Ø5.5 (joint plat, poche de la base) : garde 1.0 mm de joint plat jusqu au pincement
 WINDOW_X, WINDOW_Y = 190.0, 110.0                 # fenêtre optique
 GLASS_X, GLASS_Y, GLASS_T = 224.6, 140.6, 4.6      # plaque de verre / quartz
 GLASS_CORNER_R = 18.6                             # rayon des angles du verre
@@ -116,9 +117,7 @@ USER_PARAMS = [
     ('Gasket_T', 0.2, "Epaisseur du joint plat (air)"),
     ('Clamp_Screw_Depth', 8.0, "Profondeur des taraudages M3 de serrage (cadre)"),
     ('Head_Pocket_Depth', 2.5, "Profondeur des poches de tete M3 (base)"),
-    ('Tension_Groove_D', 0.5, "Profondeur de la rainure du jonc de tension (cadre)"),
-    ('Tension_Rib_H', 0.4, "Hauteur de la nervure du jonc de tension (contre-bride)"),
-    ('Groove_D', 1.1, "Profondeur de la gorge de joint torique (cadre)"),
+    ('Groove_D', 1.15, "Profondeur de la gorge de joint torique (cadre)"),
     ('Base_T', 14.0, "Epaisseur de la base optique"),
     ('Shoulder_Depth', 4.8, "Profondeur du logement quartz"),
     ('Pilot_Depth', 10.0, "Profondeur des avant-trous M4 (base)"),
@@ -411,14 +410,29 @@ def make_plate(comp, thickness_param, body_name):
     return body
 
 
+def make_rounded_plate(comp, hx, hy, r, thickness_param, body_name):
+    """Plaque à coins arrondis (demi-dimensions hx, hy, rayon r), centrée, face supérieure à Z=0 (NewBody)."""
+    sk = new_sketch(comp, comp.xYConstructionPlane, 'Contour_{:.0f}x{:.0f}'.format(2 * hx, 2 * hy))
+    draw_rounded_rect(sk, hx, hy, r)
+    feat = extrude(comp, sk.profiles.item(0), thickness_param,
+                   adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    body = feat.bodies.item(0)
+    body.name = body_name
+    return body
+
+
 # =============================================================================
 # COMPOSANT 1 - CADRE SUPÉRIEUR DE PRESSION
 # =============================================================================
+CEILING = '-Frame_H + Clamp_T + Membrane_T'   # cote Z du plafond du décrochement (expression Fusion)
+
+
 def build_frame(comp):
     make_plate(comp, 'Frame_H', 'Cadre_Superieur')
+    top = comp.xYConstructionPlane
 
     # Cuve centrale traversante 210 x 130, congés R10 dans les 4 angles verticaux
-    sk = new_sketch(comp, comp.xYConstructionPlane, 'Cuve_210x130_R10')
+    sk = new_sketch(comp, top, 'Cuve_210x130_R10')
     draw_rounded_rect(sk, VAT_X / 2.0, VAT_Y / 2.0, VAT_R)
     cut(comp, sk.profiles.item(0), 'Frame_H + 1 mm')
 
@@ -426,34 +440,37 @@ def build_frame(comp):
     cut_hole_pattern(comp, D_THROUGH, 'Frame_H + 1 mm', 'Percages_4_5')
     cut_hole_pattern(comp, D_COUNTERBORE, 'Counterbore_Depth', 'Lamages_8_5')
 
-    # 12 taraudages M3 borgnes (avant-trou Ø2.5) dans la FACE INFÉRIEURE : vis de serrage de la
-    # contre-bride, qui tiennent l'ensemble cadre + film + contre-bride sans la base.
-    cut_circles(comp, clamp_screw_positions(), D_M3_TAP, 'Clamp_Screw_Depth', 'Taraudages_M3_serrage',
-                start='-Frame_H', toward=+1)
+    # DÉCROCHEMENT de la face inférieure, où le plot entre : contour du plot + jeu de pincement,
+    # profondeur = plot + film (le dessous du plot affleure alors la face du cadre).
+    sk = new_sketch(comp, top, 'Decrochement_plot')
+    draw_rounded_rect(sk, PLUG_HX + PINCH_GAP, PLUG_HY + PINCH_GAP, PLUG_R + PINCH_GAP)
+    cut(comp, sk.profiles.item(0), 'Clamp_T + Membrane_T', top, '-Frame_H', +1)
 
-    # Gorge de joint torique 1.8 x 1.1 dans la FACE INFÉRIEURE du cadre (départ Z=-Frame_H,
-    # vers le haut) : le joint presse le film sur la contre-bride, tout autour de la cuve.
-    sk = new_sketch(comp, comp.xYConstructionPlane, 'Gorge_joint_face_inferieure')
+    # 12 taraudages M3 borgnes (avant-trou Ø2.5) depuis le PLAFOND du décrochement
+    cut_circles(comp, clamp_screw_positions(), D_M3_TAP, 'Clamp_Screw_Depth', 'Taraudages_M3_serrage',
+                start=CEILING, toward=+1)
+
+    # Gorge de joint torique Ø1.5 (2.0 x 1.15) dans le plafond du décrochement : le joint presse le film
+    # sur le plot, tout autour de la cuve.
+    sk = new_sketch(comp, top, 'Gorge_joint_plafond')
     draw_rounded_rect(sk, GROOVE_HALF_X + GROOVE_W / 2.0, GROOVE_HALF_Y + GROOVE_W / 2.0,
                       GROOVE_CORNER_R + GROOVE_W / 2.0)
     draw_rounded_rect(sk, GROOVE_HALF_X - GROOVE_W / 2.0, GROOVE_HALF_Y - GROOVE_W / 2.0,
                       GROOVE_CORNER_R - GROOVE_W / 2.0)
-    cut(comp, ring_profile(sk), 'Groove_D', comp.xYConstructionPlane, '-Frame_H', +1)
-
-    # Rainure du jonc de tension (1.2 x 0.5), entre la cuve et la gorge du joint torique
-    sk = new_sketch(comp, comp.xYConstructionPlane, 'Rainure_jonc_tension')
-    draw_rounded_rect(sk, TENSION_HALF_X + TG_W / 2.0, TENSION_HALF_Y + TG_W / 2.0, TENSION_CORNER_R + TG_W / 2.0)
-    draw_rounded_rect(sk, TENSION_HALF_X - TG_W / 2.0, TENSION_HALF_Y - TG_W / 2.0, TENSION_CORNER_R - TG_W / 2.0)
-    cut(comp, ring_profile(sk), 'Tension_Groove_D', comp.xYConstructionPlane, '-Frame_H', +1)
+    cut(comp, ring_profile(sk), 'Groove_D', top, CEILING, +1)
 
 
 # =============================================================================
 # COMPOSANT 2 - MEMBRANE PFA
 # =============================================================================
 def build_membrane(comp):
-    make_plate(comp, 'Membrane_T', 'Membrane_PFA')
+    """
+    Film PFA, plan au plafond du décrochement, au contour du plot. Dans la réalité il déborde, est
+    rabattu le long de la paroi du plot (pincement radial) puis détouré : le rabat n'est pas modélisé.
+    """
+    make_rounded_plate(comp, PLUG_HX, PLUG_HY, PLUG_R, 'Membrane_T', 'Membrane_PFA')
     cut_hole_pattern(comp, D_THROUGH, 'Membrane_T + 1 mm', 'Percages_4_5')
-    # Passages des vis M3 de serrage : tous HORS du joint torique (le film n'est pas percé à l'intérieur).
+    # Passages des vis M3 de serrage
     cut_circles(comp, clamp_screw_positions(), D_M3_CLEAR, 'Membrane_T + 1 mm', 'Percages_M3_serrage')
 
 
@@ -490,20 +507,12 @@ def draw_pneumatic_paths(sk, thickness):
 
 def build_clamp_spacer(comp):
     """
-    Contre-bride / spacer 1.0 mm, rigide : elle plaque le film contre la face inférieure du cadre
-    (gorge + joint torique) et fixe l'écart film-verre. Cavité 190 x 110 traversante (le fond de la
-    chambre est le verre), 20 passages M4, 12 passages M3 de serrage, et les 6 voies pneumatiques.
+    Plot / contre-bride 1.0 mm, rigide : il entre dans le décrochement du cadre en pinçant le film
+    contre sa paroi, et fixe l'écart film-verre. Cavité 190 x 110 traversante (le fond de la chambre
+    est le verre), 20 passages M4, 12 passages M3 de serrage, et les 6 voies pneumatiques.
     """
-    make_plate(comp, 'Clamp_T', 'Contre_bride_spacer')
+    make_rounded_plate(comp, PLUG_HX, PLUG_HY, PLUG_R, 'Clamp_T', 'Plot_contre_bride')
     top = comp.xYConstructionPlane
-
-    # Nervure du jonc de tension (0.75 x 0.4) sur la face supérieure : elle enfonce le film dans la
-    # rainure du cadre. Réunie au corps (Join) ; les fentes pneumatiques la recoupent ensuite.
-    sk = new_sketch(comp, top, 'Nervure_jonc_tension')
-    draw_rounded_rect(sk, TENSION_HALF_X + TR_W / 2.0, TENSION_HALF_Y + TR_W / 2.0, TENSION_CORNER_R + TR_W / 2.0)
-    draw_rounded_rect(sk, TENSION_HALF_X - TR_W / 2.0, TENSION_HALF_Y - TR_W / 2.0, TENSION_CORNER_R - TR_W / 2.0)
-    extrude(comp, ring_profile(sk), 'Tension_Rib_H', adsk.fusion.FeatureOperations.JoinFeatureOperation,
-            top, 0.0, +1)
 
     cut_hole_pattern(comp, D_THROUGH, 'Clamp_T + 1 mm', 'Percages_4_5')
     cut_circles(comp, clamp_screw_positions(), D_M3_CLEAR, 'Clamp_T + 1 mm', 'Percages_M3_serrage')
@@ -512,11 +521,9 @@ def build_clamp_spacer(comp):
     sk.sketchCurves.sketchLines.addCenterPointRectangle(P(0, 0), P(CAVITY_X / 2.0, CAVITY_Y / 2.0))
     cut(comp, sk.profiles.item(0), 'Clamp_T + 1 mm')
 
-    # Les voies pneumatiques traversent la contre-bride ; la coupe démarre AU-DESSUS de la nervure
-    # (Z = +Tension_Rib_H) pour la recouper aussi là où elle croise une fente.
     sk = new_sketch(comp, top, 'Voies_pneumatiques')
     draw_pneumatic_paths(sk, p_mm('Clamp_T'))
-    cut(comp, all_profiles(sk), 'Clamp_T + Tension_Rib_H + 1 mm', top, 'Tension_Rib_H', -1)
+    cut(comp, all_profiles(sk), 'Clamp_T + 1 mm')
 
 
 # =============================================================================
@@ -669,15 +676,17 @@ def run(context):
 
         # Cote Z de la face supérieure de chaque pièce (empilement vers le bas, haut du cadre à 0)
         z_frame = 0.0
-        z_membrane = z_frame - p_mm('Frame_H')
+        # Le plot affleure la face inférieure du cadre ; le film est entre le plot et le plafond du décrochement.
+        z_ceiling = z_frame - p_mm('Frame_H') + p_mm('Clamp_T') + p_mm('Membrane_T')
+        z_membrane = z_ceiling
         z_clamp = z_membrane - p_mm('Membrane_T')
-        z_gasket = z_clamp - p_mm('Clamp_T')
+        z_gasket = z_clamp - p_mm('Clamp_T')            # = face inférieure du cadre
         z_base = z_gasket - p_mm('Gasket_T')
 
         parts = (
             ('1_Cadre_Superieur', z_frame, build_frame),
             ('2_Membrane_PFA', z_membrane, build_membrane),
-            ('3_Contre_Bride_Spacer', z_clamp, build_clamp_spacer),
+            ('3_Plot_Contre_Bride', z_clamp, build_clamp_spacer),
             ('4_Joint_Plat', z_gasket, build_gasket),
             ('5_Base_Optique', z_base, build_base),
         )
@@ -688,8 +697,8 @@ def run(context):
         # Pièces de visualisation (joint torique, vis M3) : une erreur ici n'arrête pas l'assemblage.
         warnings = []
         try:
-            # centre de la section du joint : à mi-hauteur entre le fond de gorge et le dessus de la contre-bride
-            z_oring = ((z_frame - p_mm('Frame_H') + p_mm('Groove_D')) + z_clamp) / 2.0
+            # centre de la section du joint : à mi-hauteur entre le fond de gorge et le dessus du film
+            z_oring = z_ceiling + p_mm('Groove_D') / 2.0
             occ = new_part(root, '6_Joint_torique_1_5', z_oring)
             build_oring(occ.component)
         except Exception:
