@@ -59,7 +59,9 @@ D_PILOT = 3.3         # avant-trou taraudage M4
 
 VAT_X, VAT_Y, VAT_R = 210.0, 130.0, 10.0          # cuve du cadre (traversante, congés R10)
 CAVITY_X, CAVITY_Y = 190.0, 110.0                 # cavité O2 du spacer
-GROOVE_HALF_X, GROOVE_HALF_Y, GROOVE_CORNER_R = 102.0, 62.0, 5.0   # axe médian des gorges
+# Joint torique UNIQUE, dans la face inférieure du cadre (il presse la membrane sur le spacer) :
+# axe médian à 110 x 70 mm, entre la cuve (105 x 65) et les perçages de fixation (bord à 115.25).
+GROOVE_HALF_X, GROOVE_HALF_Y, GROOVE_CORNER_R, GROOVE_W = 110.0, 70.0, 12.0, 1.8
 WINDOW_X, WINDOW_Y = 190.0, 110.0                 # fenêtre optique
 GLASS_X, GLASS_Y, GLASS_T = 224.6, 140.6, 4.6      # plaque de verre / quartz
 GLASS_CORNER_R = 18.6                             # rayon des angles du verre
@@ -70,7 +72,14 @@ SHOULDER_R = GLASS_CORNER_R + GLASS_CLEARANCE     # rayon des angles du logement
 
 D_M5_TAP = 4.2        # avant-trou M5 (filetage non modélisé)
 D_M3_TAP = 2.5        # avant-trou M3 (filetage non modélisé)
-PORT_BREAKTHROUGH = 1.0  # les forages dépassent de 1 mm dans la cavité (vide) pour déboucher franchement
+# Circuit pneumatique : le spacer (1.2 mm) ne peut pas recevoir de raccord. Les raccords M5 / M3 sont
+# percés dans les flancs de la BASE ; un canal vertical monte de chaque forage jusqu'à une fente
+# Ø1.0 (rainure traversante) découpée dans le spacer, qui débouche dans la cavité O2.
+D_CHAN_M5 = 2.0       # canal vertical dans la base (voie M5)
+D_CHAN_M3 = 1.5       # canal vertical dans la base (voie M3, capteur SDP810)
+SLOT_W = 1.0          # fente oblongue Ø1.0 dans le spacer
+PORT_STOP_Y = 76.0    # fond des forages M5 des grands côtés / position du canal vertical (|y|)
+PORT_STOP_X = 116.0   # fond des forages des petits côtés / position du canal vertical (|x|)
 
 # =============================================================================
 # USER PARAMETERS Fusion (nom, valeur en mm, commentaire)
@@ -79,8 +88,8 @@ USER_PARAMS = [
     ('Frame_H', 60.0, "Hauteur du cadre superieur (50 resine + 10 garde)"),
     ('Counterbore_Depth', 48.0, "Profondeur des lamages Ø8.5 (tetes CHC M4)"),
     ('Membrane_T', 0.075, "Epaisseur membrane PFA (75 um)"),
-    ('Spacer_T', 12.0, "Epaisseur du spacer pneumatique"),
-    ('Groove_D', 1.1, "Profondeur des gorges de joint torique"),
+    ('Spacer_T', 1.2, "Epaisseur du spacer pneumatique (cale)"),
+    ('Groove_D', 1.1, "Profondeur de la gorge de joint torique (cadre)"),
     ('Base_T', 14.0, "Epaisseur de la base optique"),
     ('Shoulder_Depth', 4.8, "Profondeur du logement quartz"),
     ('Pilot_Depth', 10.0, "Profondeur des avant-trous M4 (base)"),
@@ -215,6 +224,26 @@ def draw_rounded_rect(sk, half_x, half_y, r):
     sk.geometricConstraints.addCoincident(a4.endSketchPoint, l1.startSketchPoint)   # fermeture
 
 
+def draw_slot(sk, c1, c2, width):
+    """Fente oblongue entre les centres c1 et c2 (tuples mm), largeur `width`."""
+    lines = sk.sketchCurves.sketchLines
+    arcs = sk.sketchCurves.sketchArcs
+    r = width / 2.0
+    dx, dy = c2[0] - c1[0], c2[1] - c1[1]
+    n = math.hypot(dx, dy)
+    dx, dy = dx / n, dy / n
+    nx, ny = -dy, dx                       # normale = direction tournée de +90 deg
+
+    def pt(c, s):
+        return P(c[0] + s * r * nx, c[1] + s * r * ny)
+
+    lA = lines.addByTwoPoints(pt(c1, -1), pt(c2, -1))                       # côté -n
+    aB = arcs.addByCenterStartSweep(P(*c2), lA.endSketchPoint, math.pi)     # bout côté c2
+    lC = lines.addByTwoPoints(aB.endSketchPoint, pt(c1, +1))                # côté +n (retour)
+    aD = arcs.addByCenterStartSweep(P(*c1), lC.endSketchPoint, math.pi)     # bout côté c1
+    sk.geometricConstraints.addCoincident(aD.endSketchPoint, lA.startSketchPoint)
+
+
 # --- Matrice de fixation ------------------------------------------------------------
 def hole_positions():
     """
@@ -242,6 +271,35 @@ def cut_hole_pattern(comp, diameter, depth, name):
     for (x, y) in pts:
         circles.addByCenterRadius(P(x, y), mm(diameter / 2.0))
     return cut(comp, all_profiles(sk), depth)
+
+
+def pneumatic_ports():
+    """
+    Les 6 voies pneumatiques : 4 évents M5 (grands côtés), 1 injection M5 (flanc court droit),
+    1 prise de pression M3 (flanc court gauche). Chaque voie est un dict :
+      name, axis ('x' ou 'y' : sens du forage), sign (+1/-1 : flanc), across (cote sur l'autre axe),
+      stop (|coord| du fond de forage = position du canal vertical), tap (Ø forage), chan (Ø canal).
+    Les évents sont placés au milieu de deux perçages de fixation voisins, les ports courts au
+    milieu de deux perçages voisins des petits côtés (jeu maximal avec les vis).
+    """
+    _, xs, ys = hole_positions()
+    vent_x = (xs[N_HOLES_X // 2 + 1] + xs[N_HOLES_X // 2 + 2]) / 2.0
+    port_y = (ys[N_HOLES_Y // 2] + ys[N_HOLES_Y // 2 + 1]) / 2.0
+    ports = []
+    for sy in (-1, 1):
+        for vx in (-vent_x, vent_x):
+            ports.append(dict(name='Event_M5_x{:+.0f}_y{:+d}'.format(vx, sy), axis='y', sign=sy,
+                              across=vx, stop=PORT_STOP_Y, tap=D_M5_TAP, chan=D_CHAN_M5))
+    ports.append(dict(name='Port_injection_M5', axis='x', sign=+1, across=port_y,
+                      stop=PORT_STOP_X, tap=D_M5_TAP, chan=D_CHAN_M5))
+    ports.append(dict(name='Port_SDP810_M3', axis='x', sign=-1, across=-port_y,
+                      stop=PORT_STOP_X, tap=D_M3_TAP, chan=D_CHAN_M3))
+    return ports
+
+
+def port_xy(p):
+    """Position (x, y) en mm du canal vertical d'une voie."""
+    return (p['across'], p['sign'] * p['stop']) if p['axis'] == 'y' else (p['sign'] * p['stop'], p['across'])
 
 
 # --- Composants / occurrences ---------------------------------------------------------
@@ -287,6 +345,15 @@ def build_frame(comp):
     cut_hole_pattern(comp, D_THROUGH, 'Frame_H + 1 mm', 'Percages_4_5')
     cut_hole_pattern(comp, D_COUNTERBORE, 'Counterbore_Depth', 'Lamages_8_5')
 
+    # Gorge de joint torique 1.8 x 1.1 dans la FACE INFÉRIEURE du cadre (départ Z=-Frame_H,
+    # vers le haut) : le joint presse la membrane sur le spacer, autour de la cuve et de la cavité.
+    sk = new_sketch(comp, comp.xYConstructionPlane, 'Gorge_joint_face_inferieure')
+    draw_rounded_rect(sk, GROOVE_HALF_X + GROOVE_W / 2.0, GROOVE_HALF_Y + GROOVE_W / 2.0,
+                      GROOVE_CORNER_R + GROOVE_W / 2.0)
+    draw_rounded_rect(sk, GROOVE_HALF_X - GROOVE_W / 2.0, GROOVE_HALF_Y - GROOVE_W / 2.0,
+                      GROOVE_CORNER_R - GROOVE_W / 2.0)
+    cut(comp, ring_profile(sk), 'Groove_D', comp.xYConstructionPlane, '-Frame_H', +1)
+
 
 # =============================================================================
 # COMPOSANT 2 - MEMBRANE PFA
@@ -298,6 +365,40 @@ def build_membrane(comp):
 
 # =============================================================================
 # COMPOSANT 3 - SPACER / CŒUR PNEUMATIQUE
+# =============================================================================
+def build_spacer(comp):
+    """
+    Spacer 1.2 mm : cale plate, sans gorge (le joint est dans le cadre) et sans fond. La cavité
+    190 x 110 est traversante ; le fond de la chambre est le verre posé dans la base.
+    Chaque voie pneumatique arrive par une fente oblongue Ø1.0 traversante (1.2 mm de haut une fois
+    prise entre la membrane et la base), qui part de la cavité et va jusqu'au canal vertical de la base.
+    """
+    make_plate(comp, 'Spacer_T', 'Spacer_Pneumatique')
+    top = comp.xYConstructionPlane
+
+    # 20 passages de vis Ø4.5 (même matrice que les autres pièces)
+    cut_hole_pattern(comp, D_THROUGH, 'Spacer_T + 1 mm', 'Percages_4_5')
+
+    # Cavité de la chambre à oxygène 190 x 110 traversante
+    sk = new_sketch(comp, top, 'Cavite_190x110')
+    sk.sketchCurves.sketchLines.addCenterPointRectangle(P(0, 0), P(CAVITY_X / 2.0, CAVITY_Y / 2.0))
+    cut(comp, sk.profiles.item(0), 'Spacer_T + 1 mm')
+
+    # Fentes oblongues : de 1.5 mm à l'intérieur de la cavité (vide) jusqu'au canal de la base
+    cav_hx, cav_hy = CAVITY_X / 2.0, CAVITY_Y / 2.0
+    sk = new_sketch(comp, top, 'Fentes_oblongues_1_0')
+    for p in pneumatic_ports():
+        x2, y2 = port_xy(p)
+        if p['axis'] == 'y':
+            c1 = (p['across'], p['sign'] * (cav_hy - 1.5))
+        else:
+            c1 = (p['sign'] * (cav_hx - 1.5), p['across'])
+        draw_slot(sk, c1, (x2, y2), SLOT_W)
+    cut(comp, all_profiles(sk), 'Spacer_T + 1 mm')
+
+
+# =============================================================================
+# COMPOSANT 4 - BASE OPTIQUE SUPPORT
 # =============================================================================
 def cut_bore(comp, plane, center_mm, start, toward, depth_mm, diameter, name):
     """
@@ -315,66 +416,10 @@ def cut_bore(comp, plane, center_mm, start, toward, depth_mm, diameter, name):
     cut(comp, sk.profiles.item(0), depth_mm, plane, start, toward)
 
 
-def build_spacer(comp):
-    make_plate(comp, 'Spacer_T', 'Spacer_Pneumatique')
-    top = comp.xYConstructionPlane
-    spacer_t = p_mm('Spacer_T')
-
-    # 20 passages de vis Ø4.5 (même matrice que les autres pièces)
-    cut_hole_pattern(comp, D_THROUGH, 'Spacer_T + 1 mm', 'Percages_4_5')
-
-    # Cavité de la chambre à oxygène 190 x 110 TRAVERSANTE : le spacer est un cadre, sans fond.
-    # Le fond de la chambre est la plaque de verre / quartz posée dans la base.
-    sk = new_sketch(comp, top, 'Cavite_190x110')
-    sk.sketchCurves.sketchLines.addCenterPointRectangle(P(0, 0), P(CAVITY_X / 2.0, CAVITY_Y / 2.0))
-    cut(comp, sk.profiles.item(0), 'Spacer_T + 1 mm')
-
-    # Gorges de joint torique 1.8 x 1.1 : face supérieure (départ Z=0, vers le bas) et face
-    # inférieure (départ Z=-Spacer_T, vers le haut). Même esquisse XY, décalage de départ.
-    gw = 1.8
-    for label, start, toward in (('sup', 0.0, -1), ('inf', '-Spacer_T', +1)):
-        sk = new_sketch(comp, top, 'Gorge_joint_' + label)
-        draw_rounded_rect(sk, GROOVE_HALF_X + gw / 2.0, GROOVE_HALF_Y + gw / 2.0,
-                          GROOVE_CORNER_R + gw / 2.0)
-        draw_rounded_rect(sk, GROOVE_HALF_X - gw / 2.0, GROOVE_HALF_Y - gw / 2.0,
-                          GROOVE_CORNER_R - gw / 2.0)
-        cut(comp, ring_profile(sk), 'Groove_D', top, start, toward)
-
-    # --- Évents et ports : forages HORIZONTAUX depuis les flancs, à mi-épaisseur -------------
-    # Ils traversent la paroi du spacer et débouchent directement dans la paroi de la cavité
-    # (traversante). Rien n'est usiné sur la face supérieure ni sur le fond de la chambre.
-    port_z = -spacer_t / 2.0
-    cav_hx, cav_hy = CAVITY_X / 2.0, CAVITY_Y / 2.0
-    end_x = cav_hx - PORT_BREAKTHROUGH         # fond de forage : juste dans la cavité (vide)
-    end_y = cav_hy - PORT_BREAKTHROUGH
-    out_x = LENGTH_X / 2.0 + 1.0               # départ au-delà du flanc (coupe franche)
-    out_y = WIDTH_Y / 2.0 + 1.0
-
-    _, xs, ys = hole_positions()
-    # Évents au milieu de deux perçages de fixation voisins (jeu maximal avec les vis)
-    vent_x = (xs[N_HOLES_X // 2 + 1] + xs[N_HOLES_X // 2 + 2]) / 2.0
-    # Ports courts au milieu de deux perçages voisins des petits côtés
-    port_y = (ys[N_HOLES_Y // 2] + ys[N_HOLES_Y // 2 + 1]) / 2.0
-
-    xz, yz = comp.xZConstructionPlane, comp.yZConstructionPlane
-
-    # 4 évents M5 sur les grands côtés (flancs Y = +/- 85) : 2 par côté
-    for sy in (-1, 1):
-        for vx in (-vent_x, vent_x):
-            cut_bore(comp, xz, (vx, 0.0, port_z), sy * end_y, sy, out_y - end_y, D_M5_TAP,
-                     'Event_M5_x{:+.0f}_y{:+d}'.format(vx, sy))
-
-    # Port d'injection M5 (flanc court droit, X=+125) et port capteur SDP810 M3 (gauche, X=-125)
-    cut_bore(comp, yz, (0.0, port_y, port_z), +end_x, +1, out_x - end_x, D_M5_TAP, 'Port_injection_M5')
-    cut_bore(comp, yz, (0.0, -port_y, port_z), -end_x, -1, out_x - end_x, D_M3_TAP, 'Port_SDP810_M3')
-
-
-# =============================================================================
-# COMPOSANT 4 - BASE OPTIQUE SUPPORT
-# =============================================================================
 def build_base(comp):
     make_plate(comp, 'Base_T', 'Base_Optique')
     top = comp.xYConstructionPlane
+    base_t = p_mm('Base_T')
 
     # Fenêtre optique traversante 190 x 110
     sk = new_sketch(comp, top, 'Fenetre_190x110')
@@ -388,6 +433,29 @@ def build_base(comp):
 
     # 20 avant-trous borgnes Ø3.3 x 10 (taraudage M4 final), coïncidents avec la matrice
     cut_hole_pattern(comp, D_PILOT, 'Pilot_Depth', 'Avant_trous_3_3')
+
+    # --- Raccords pneumatiques M5 / M3 : forages horizontaux dans les flancs de la base --------
+    # (à mi-épaisseur), arrêtés à PORT_STOP_* ; un canal vertical monte ensuite jusqu'à la face
+    # supérieure, sous la fente correspondante du spacer.
+    port_z = -base_t / 2.0
+    out_x = LENGTH_X / 2.0 + 1.0           # départ au-delà du flanc (coupe franche)
+    out_y = WIDTH_Y / 2.0 + 1.0
+    xz, yz = comp.xZConstructionPlane, comp.yZConstructionPlane
+    ports = pneumatic_ports()
+    for p in ports:
+        if p['axis'] == 'y':
+            cut_bore(comp, xz, (p['across'], 0.0, port_z), p['sign'] * p['stop'], p['sign'],
+                     out_y - p['stop'], p['tap'], p['name'])
+        else:
+            cut_bore(comp, yz, (0.0, p['across'], port_z), p['sign'] * p['stop'], p['sign'],
+                     out_x - p['stop'], p['tap'], p['name'])
+
+    # Canaux verticaux depuis la face supérieure jusqu'à l'axe des forages
+    sk = new_sketch(comp, top, 'Canaux_verticaux')
+    for p in ports:
+        x, y = port_xy(p)
+        sk.sketchCurves.sketchCircles.addByCenterRadius(P(x, y), mm(p['chan'] / 2.0))
+    cut(comp, all_profiles(sk), 'Base_T / 2')
 
 
 # =============================================================================
