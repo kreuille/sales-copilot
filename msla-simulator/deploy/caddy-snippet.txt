@@ -1,0 +1,11 @@
+# CAS B — Caddy (hôte ou Docker) : AJOUTER ce bloc à la fin du Caddyfile (après sauvegarde).
+# Caddy obtient et renouvelle le certificat tout seul.
+simulation.guedou.ch {
+    root * /var/www/simulation
+    redir /light /light/ permanent
+    redir /ligth /light/ permanent
+    file_server
+}
+# Si Caddy tourne dans Docker : monter /var/www/simulation en lecture seule (ajout d'un volume
+# => recréation du conteneur Caddy = coupure de quelques secondes : à valider avec vous avant).
+# Recharger sans coupure :  caddy reload --config /chemin/Caddyfile
